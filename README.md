@@ -1,5 +1,1 @@
-<<<<<<< HEAD
-backend project for slideee.ru
-=======
-# backend
->>>>>>> master
+#backend project for slideee.ru
