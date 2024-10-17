@@ -4,7 +4,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.contrib.auth import authenticate, login
-import openai  # Добавляем импорт openai
+import openai  # Добавляем импорт openai_services
 
 import json
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -289,6 +289,7 @@ class GenerateImagesView(APIView):
         
         saved_images = []
         for url in image_urls:
+
             # Загружаем изображение
             response = requests.get(url)
             if response.status_code == 200:

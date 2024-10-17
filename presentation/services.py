@@ -8,8 +8,9 @@ from json import dumps
 from re import findall
 from io import BytesIO
 
+import requests
 from django.conf import settings
-from django.core.files.base import File
+from django.core.files.base import File, ContentFile
 
 from openai.types.chat import ChatCompletion
 
@@ -134,7 +135,6 @@ def generate_slides_text(slides_themes: list) -> list[str]:
 ################### НОВЫЕ АПИ
 
 def generate_custom_request(prompt: str, max_tokens: int = 500) -> str:
-    # Генерация короткого текста для введения или краткого описания темы презентации.
     messages = [
         {"role": "user", "content": prompt}
     ]
