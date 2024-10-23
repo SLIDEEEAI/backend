@@ -1,3 +1,6 @@
+import random
+
+from django.db.models import F
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -9,7 +12,11 @@ import openai  # Добавляем импорт openai
 import json
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import AccessToken
-from presentation.models import User, Presentation
+from presentation.models import User, Presentation, Transaction, Tariff
+from source.settings import PAYKEEPER_USER, PAYKEEPER_PASSWORD, SERVER_PAYKEEPER
+from django.shortcuts import get_object_or_404
+from django.db import transaction as atomic_transaction
+from rest_framework import generics
 
 from .serializers import (
     RegistrationSerializer,
@@ -18,6 +25,8 @@ from .serializers import (
     GenerateSlidesSerializer,
     GPTRequestSerializer,
     GetPresentationSerializer,
+    PaykeeperWebhookSerializer,
+    TariffSerializer, UserSerializer,
 )
 
 from .services import (
@@ -38,105 +47,169 @@ from .services import (
     generate_custom_request,
 )
 
-import requests
 import base64
 import json
 
-# новые
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.views import View
-from .models import User  # Импортируйте вашу модель User
-
-from .serializers import PaykeeperWebhookSerializer
-
+from .models import User
 
 
 class PaykeeperWebhookView(APIView):
-    # authentication_classes = (JWTAuthentication, )
-    # permission_classes = (IsAuthenticated, )
-
+    @atomic_transaction.atomic
     def post(self, request):
-        try:
+        serializer = PaykeeperWebhookSerializer(data=request.data, many=True)
 
-            user = User.objects.filter(id=request.data.get('clientid')).first()
+        if not serializer.is_valid():
+            return self.create_error_response('Invalid data', serializer.errors)
 
-            if user:
-                # user.balance += round( int (request.data.get('sum') ) )
-                user.balance += 100
-                user.save()
-                return JsonResponse({'status': 'success'}, status=200)
-            else:
-                return JsonResponse({'status': 'user not found'}, status=404)
-        except json.JSONDecodeError:
-            return JsonResponse({'status': 'invalid data'}, status=400)
-        except Exception as e:
-            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+        for transaction_data in serializer.validated_data:
+            order_id = transaction_data['orderid']
+            status = transaction_data['status']
+            amount = transaction_data['pay_amount']
+
+            transaction = self.get_transaction(order_id)
+            if transaction.status == Transaction.Statuses.COMPLETED:
+                continue
+
+            if not transaction:
+                return self.create_error_response('Transaction not found', {'orderid': order_id})
+
+            if status == 'success':
+                if not self.validate_amount(transaction, amount):
+                    return self.create_error_response('Amount mismatch',
+                                                      {'expected': transaction.amount, 'received': amount})
+
+                self.complete_transaction(transaction, amount)
+
+        return JsonResponse({'status': 'success'}, status=200)
+
+    def get_transaction(self, order_id):
+        """Helper method to retrieve the transaction based on the order_id."""
+        return get_object_or_404(Transaction, order_id=order_id)
+
+    def validate_amount(self, transaction, amount):
+        """Check if the received amount matches the transaction amount."""
+        return amount == transaction.amount
+
+    def complete_transaction(self, transaction, amount):
+        """Complete the transaction, update user's balance and presentation count."""
+        transaction.status = Transaction.Statuses.COMPLETED
+        transaction.user.balance = F('balance') + transaction.amount
+
+        tariff = Tariff.objects.filter(price=amount).first()
+        if tariff:
+            transaction.user.presentation = F('presentation') + tariff.presentation_count
+
+        transaction.user.save()
+        transaction.save()
+
+    def create_error_response(self, message, details=None, status=400):
+        """Helper method to create structured error responses."""
+        error_response = {'status': 'error', 'message': message}
+        if details:
+            error_response['details'] = details
+        return JsonResponse(error_response, status=status)
 
 
 class CreatePaymentLinkView(APIView):
-
     authentication_classes = (JWTAuthentication, )
     permission_classes = (IsAuthenticated, )
 
-    # Логин и пароль от личного кабинета PayKeeper
-    user = "admin"
-    password = "67f53b702716"
-
     def post(self, request):
         try:
+            user = request.user
+            # user = User.objects.all().last()
+            transaction_uuid = uuid.uuid4()
+            amount = request.data.get('pay_amount')
 
-            # Basic-авторизация передаётся как base64
-            credentials = f"{self.user}:{self.password}"
-            base64_credentials = base64.b64encode(credentials.encode()).decode('utf-8')
-            headers = {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Authorization': f'Basic {base64_credentials}'
-            }
+            token = self.get_paykeeper_token()
 
-            # Укажите адрес ВАШЕГО сервера PayKeeper, адрес demo.paykeeper.ru - пример!
-            server_paykeeper = "https://slideeeeeee.server.paykeeper.ru"
+            payment_data = self.build_payment_data(user, transaction_uuid, amount)
+            payment_link = self.create_invoice_link(payment_data, token)
 
-            # Параметры платежа, сумма - обязательный параметр
-            # Остальные параметры можно не задавать
-            payment_data = {
-                "pay_amount": request.data.get('pay_amount'),
-                "clientid": request.data.get('clientid'),
-                "orderid": request.data.get('orderid'),
-                "client_email": request.data.get('client_email'),
-                "service_name": request.data.get('service_name'),
-                "client_phone": request.data.get('client_phone')
-            }
+            self.save_transaction(transaction_uuid, user, amount, payment_link)
 
-            # Готовим первый запрос на получение токена безопасности
-            uri = "/info/settings/token/"
-            response = requests.get(server_paykeeper + uri, headers=headers)
-            php_array = response.json()
-
-            # В ответе должно быть заполнено поле token, иначе - ошибка
-            token = php_array.get('token')
-            if not token:
-                raise ValueError('Token not found')
-
-            # Готовим запрос 3.4 JSON API на получение счёта
-            uri = "/change/invoice/preview/"
-            payload = {**payment_data, 'token': token}
-            response = requests.post(server_paykeeper + uri, headers=headers, data=payload)
-            response_data = response.json()
-
-            # В ответе должно быть поле invoice_id, иначе - ошибка
-            invoice_id = response_data.get('invoice_id')
-            if not invoice_id:
-                raise ValueError('Invoice ID not found')
-
-            # В этой переменной прямая ссылка на оплату с заданными параметрами
-            link = f"{server_paykeeper}/bill/{invoice_id}/"
-
-            # Теперь её можно использовать как угодно, например, выводим ссылку на оплату
-            return JsonResponse( { 'link': link } , status=200 )
+            return JsonResponse({'link': payment_link}, status=200)
 
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+    def get_paykeeper_token(self):
+        """Fetches the token from PayKeeper."""
+        headers = self.build_auth_headers()
+
+        uri = "/info/settings/token/"
+        response = requests.get(SERVER_PAYKEEPER + uri, headers=headers)
+        php_array = response.json()
+
+        token = php_array.get('token')
+        if not token:
+            raise ValueError('Token not found')
+
+        return token
+
+    def build_auth_headers(self):
+        """Builds authorization headers for PayKeeper requests."""
+        credentials = f"{PAYKEEPER_USER}:{PAYKEEPER_PASSWORD}"
+        base64_credentials = base64.b64encode(credentials.encode()).decode('utf-8')
+        headers = {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Authorization': f'Basic {base64_credentials}'
+        }
+        return headers
+
+    def build_payment_data(self, user, transaction_uuid, amount):
+        """Builds payment data for PayKeeper request."""
+        return {
+            "pay_amount": amount,
+            "clientid": user.id,
+            "orderid": transaction_uuid,
+            "client_email": user.email,
+            "service_name": 'Пополнение баланса SlideeeAI',
+        }
+
+    def create_invoice_link(self, payment_data, token):
+        """Creates an invoice link using PayKeeper API."""
+        headers = self.build_auth_headers()
+        uri = "/change/invoice/preview/"
+
+        payload = {**payment_data, 'token': token}
+        response = requests.post(SERVER_PAYKEEPER + uri, headers=headers, data=payload)
+        response_data = response.json()
+
+        invoice_id = response_data.get('invoice_id')
+        if not invoice_id:
+            raise ValueError('Invoice ID not found')
+
+        return f"{SERVER_PAYKEEPER}/bill/{invoice_id}/"
+
+    def save_transaction(self, transaction_uuid, user, amount, payment_link):
+        """Saves the transaction to the database."""
+        Transaction.objects.create(
+            uuid=transaction_uuid,
+            user=user,
+            order_id=transaction_uuid,
+            amount=amount,
+            currency='RUB',
+            status=Transaction.Statuses.WAITING_PAYMENT,
+            payment_url=payment_link,
+        )
+
+
+class DecrementPresentationView(APIView):
+    authentication_classes = (JWTAuthentication, )
+    permission_classes = (IsAuthenticated, )
+
+    def post(self, request):
+        user = request.user
+
+        if user.presentation < 1:
+            return Response({'error': 'User does not have enough presentations left.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.presentation = F('presentation') - 1
+        user.save()
+
+        return Response({'status': 'success'}, status=status.HTTP_200_OK)
 
 
 class GPTRequestView(APIView):
@@ -544,3 +617,17 @@ class ExportPresentationView(APIView):
             data="Presentation not found!",
             status=400
         )
+
+
+class TariffListView(generics.ListAPIView):
+    queryset = Tariff.objects.all()
+    serializer_class = TariffSerializer
+
+
+class CurrentUserView(generics.RetrieveAPIView):
+    authentication_classes = (JWTAuthentication, )
+    permission_classes = (IsAuthenticated, )
+
+    def get(self, request, *args, **kwargs):
+        serializer = UserSerializer(request.user)
+        return Response(serializer.data)

@@ -22,14 +22,14 @@ from .views import (
     GenerateImagesView,
     GPTRequestView,
     PaykeeperWebhookView,  # Новый view для обработки вебхуков
-    CreatePaymentLinkView  #Новый view для получения счёта
+    CreatePaymentLinkView,  # Новый view для получения счёта
+    DecrementPresentationView, TariffListView, CurrentUserView,
 )
 
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
-
 urlpatterns = [
     path('users/registration', RegistrationView.as_view()),
     path('users/login', TokenObtainPairView.as_view()),
@@ -56,9 +56,10 @@ urlpatterns = [
     path("presentation/slide_heading/generate", GenerateSlideHeadingView.as_view()),
     path("presentation/images/generate", GenerateImagesView.as_view()),
     path('presentation/gpt/request', GPTRequestView.as_view()),
-    
-    # Новый URL для обработки Paykeeper 
+    path('presentation/decrement', DecrementPresentationView.as_view()),
+    # Новый URL для обработки Paykeeper
     path('paykeeper/webhook/', PaykeeperWebhookView.as_view(), name='paykeeper-webhook'),
-    path('paykeeper/get_payment_link', CreatePaymentLinkView.as_view())
-
+    path('paykeeper/get_payment_link', CreatePaymentLinkView.as_view()),
+    path('tariffs/', TariffListView.as_view(), name='tariff-list'),
+    path('current_user/', CurrentUserView.as_view(), name='current-user'),
 ]
