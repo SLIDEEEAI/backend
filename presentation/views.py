@@ -1,6 +1,7 @@
 import random
 
 from django.db.models import F
+from datetime import datetime
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -632,3 +633,25 @@ class CurrentUserView(generics.RetrieveAPIView):
     def get(self, request, *args, **kwargs):
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
+
+
+class CreateNewEmptyProject(APIView):
+    authentication_classes = (JWTAuthentication, )
+    permission_classes = (IsAuthenticated, )
+
+    def post(self, request):
+        try:
+            user = request.user
+            # Создаем презентацию
+            presentation = Presentation.objects.create(
+                user=user,
+                json="{\"group\": null, \"favourite\": false, \"removed\": false, \"date_created\": "+ str(datetime.now().timestamp()) +", \"date_edited\": "+ str(datetime.now().timestamp()) +", \"theme\": {\"background_color\": [255, 248, 220], \"font_info\": {\"titles\": {\"name\": \"Calibri\", \"size\": 44, \"bold\": true, \"italic\": false}, \"main_texts\": {\"name\": \"Calibri\", \"size\": 18, \"bold\": false, \"italic\": false}}}, \"len_slides\": 0, \"title\": \"Test\", \"slides\": []}"
+            )
+            return Response(
+                {
+                    "id": presentation.id
+                },
+                status=status.HTTP_201_CREATED
+            )
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)

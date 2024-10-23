@@ -23,7 +23,10 @@ from .views import (
     GPTRequestView,
     PaykeeperWebhookView,  # Новый view для обработки вебхуков
     CreatePaymentLinkView,  # Новый view для получения счёта
-    DecrementPresentationView, TariffListView, CurrentUserView,
+    DecrementPresentationView,
+    TariffListView,
+    CurrentUserView,
+    CreateNewEmptyProject,
 )
 
 from rest_framework_simplejwt.views import (
@@ -73,4 +76,5 @@ urlpatterns = [
     path('paykeeper/get_payment_link', CreatePaymentLinkView.as_view()),
     path('tariffs/', TariffListView.as_view(), name='tariff-list'),
     path('current_user/', CurrentUserView.as_view(), name='current-user'),
+    path('presentation/new', CreateNewEmptyProject.as_view()),
 ]
