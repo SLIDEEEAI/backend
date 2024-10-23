@@ -12,6 +12,8 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 from pathlib import Path
 from datetime import timedelta
+
+import httpx
 from openai import OpenAI
 import presentation
 
@@ -55,6 +57,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'drf_yasg',
     'rest_framework',
     'presentation',
     'corsheaders'
@@ -170,5 +173,13 @@ SIMPLE_JWT = {
 }
 
 OPENAI_CLIENT = OpenAI(
-    api_key="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",
+    api_key="",
+    http_client=httpx.Client(proxies={
+        "http://": "http://109.248.32.81:3128",
+        "https://": "http://109.248.32.81:3128"
+    })
 )
+
+PAYKEEPER_USER = "admin"
+PAYKEEPER_PASSWORD = "67f53b702716"
+SERVER_PAYKEEPER = "https://slideeeeeee.server.paykeeper.ru"

@@ -24,6 +24,7 @@ from pptx.enum.shapes import MSO_SHAPE_TYPE
 from datetime import datetime
 
 from .models import Picture
+import requests
 
 
 def chat_competions_create(system_content: str) -> str | None:

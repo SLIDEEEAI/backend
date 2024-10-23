@@ -4,7 +4,7 @@ from django.forms.models import model_to_dict
 from rest_framework import serializers
 from collections import OrderedDict
 
-from .models import User, Roles, Presentation
+from .models import Roles, Presentation, Tariff
 
 from .services import generate_slides_theme, generate_slides_text
 
@@ -13,15 +13,6 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework import serializers
 from .models import User
 
-class PaykeeperWebhookSerializer(serializers.Serializer):
-    user_id = serializers.IntegerField(required=True)
-    amount = serializers.IntegerField(required=True)
-
-    def validate_user_id(self, value):
-        if not User.objects.filter(id=value).exists():
-            raise serializers.ValidationError("User with this ID does not exist.")
-        return value
-    
     
 class GPTRequestSerializer(serializers.Serializer):
     gpt_request = serializers.CharField(
@@ -173,3 +164,27 @@ class GetPresentationSerializer(serializers.Serializer):
     def update(self, instance, validated_data):
         self.validate_user_presentation(instance, validated_data["id"])
         return validated_data
+
+
+class PaykeeperWebhookSerializer(serializers.Serializer):
+    orderid = serializers.UUIDField(required=True)
+    status = serializers.CharField(required=True)
+    pay_amount = serializers.DecimalField(max_digits=10, decimal_places=2, required=True)
+
+
+class UserPresentationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['presentation']
+
+
+class TariffSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tariff
+        fields = ['id', 'name', 'price', 'presentation_count']
+
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'role', 'is_active', 'is_staff', 'balance', 'presentation', 'created_at', 'updated_at']

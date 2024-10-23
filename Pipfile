@@ -12,6 +12,7 @@ python-pptx = "*"
 gunicorn = "*"
 requests = "*"
 django-cors-headers = "*"
+drf-yasg = "*"
 
 [dev-packages]
 

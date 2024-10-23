@@ -22,7 +22,8 @@ from .views import (
     GenerateImagesView,
     GPTRequestView,
     PaykeeperWebhookView,  # Новый view для обработки вебхуков
-    CreatePaymentLinkView  #Новый view для получения счёта
+    CreatePaymentLinkView,  # Новый view для получения счёта
+    DecrementPresentationView, TariffListView, CurrentUserView,
 )
 
 from rest_framework_simplejwt.views import (
@@ -66,7 +67,10 @@ urlpatterns = [
     path('generate/image', GenerateImagesAPIView.ImageGenerationAPIView.as_view()),
 
     # Новый URL для обработки Paykeeper 
+    path('presentation/decrement', DecrementPresentationView.as_view()),
+    # Новый URL для обработки Paykeeper
     path('paykeeper/webhook/', PaykeeperWebhookView.as_view(), name='paykeeper-webhook'),
-    path('paykeeper/get_payment_link', CreatePaymentLinkView.as_view())
-
+    path('paykeeper/get_payment_link', CreatePaymentLinkView.as_view()),
+    path('tariffs/', TariffListView.as_view(), name='tariff-list'),
+    path('current_user/', CurrentUserView.as_view(), name='current-user'),
 ]
