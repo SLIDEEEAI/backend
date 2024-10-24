@@ -58,29 +58,25 @@ from .models import User
 class PaykeeperWebhookView(APIView):
     @atomic_transaction.atomic
     def post(self, request):
-        serializer = PaykeeperWebhookSerializer(data=request.data, many=True)
-
+        serializer = PaykeeperWebhookSerializer(data=request.data)
         if not serializer.is_valid():
             return self.create_error_response('Invalid data', serializer.errors)
+        transaction_data = serializer.validated_data
+        order_id = transaction_data['orderid']
+        amount = transaction_data['sum']
 
-        for transaction_data in serializer.validated_data:
-            order_id = transaction_data['orderid']
-            status = transaction_data['status']
-            amount = transaction_data['pay_amount']
+        transaction = self.get_transaction(order_id)
+        if transaction.status == Transaction.Statuses.COMPLETED:
+            return JsonResponse({'status': 'success'}, status=200)
 
-            transaction = self.get_transaction(order_id)
-            if transaction.status == Transaction.Statuses.COMPLETED:
-                continue
+        if not transaction:
+            return self.create_error_response('Transaction not found', {'orderid': order_id})
 
-            if not transaction:
-                return self.create_error_response('Transaction not found', {'orderid': order_id})
+        if not self.validate_amount(transaction, amount):
+            return self.create_error_response('Amount mismatch',
+                                              {'expected': transaction.amount, 'received': amount})
 
-            if status == 'success':
-                if not self.validate_amount(transaction, amount):
-                    return self.create_error_response('Amount mismatch',
-                                                      {'expected': transaction.amount, 'received': amount})
-
-                self.complete_transaction(transaction, amount)
+        self.complete_transaction(transaction, amount)
 
         return JsonResponse({'status': 'success'}, status=200)
 
@@ -113,13 +109,13 @@ class PaykeeperWebhookView(APIView):
 
 
 class CreatePaymentLinkView(APIView):
-    authentication_classes = (JWTAuthentication, )
-    permission_classes = (IsAuthenticated, )
+    # authentication_classes = (JWTAuthentication, )
+    # permission_classes = (IsAuthenticated, )
 
     def post(self, request):
         try:
-            user = request.user
-            # user = User.objects.all().last()
+            # user = request.user
+            user = User.objects.all().last()
             transaction_uuid = uuid.uuid4()
             amount = request.data.get('pay_amount')
 
