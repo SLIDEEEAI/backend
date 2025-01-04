@@ -390,19 +390,22 @@ class GenerateImagesView(APIView):
 class RegistrationView(APIView):
     permission_classes = (AllowAny,)
     serializer_class = RegistrationSerializer
+
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.save()
+        user_data = serializer.save()
 
-        # Создать пользователя и установить баланс
+        # Установите баланс пользователя
+        user = User.objects.get(email=user_data['email'])
         initial_balance = request.data.get('balance', 1000)  # По умолчанию 1000
-        User.objects.create(email=request.data['email'], balance=initial_balance)
+        user.balance = initial_balance
+        user.save()
 
         response_data = {
             'user_id': user.id,  # Возвращаем идентификатор пользователя вместе с ответом
-            'access': str(serializer.validated_data['access']),
-            'refresh': str(serializer.validated_data['refresh']),
+            'access': user_data['token']['access'],
+            'refresh': user_data['token']['refresh'],
         }
         return Response(response_data, status=status.HTTP_201_CREATED)
 
