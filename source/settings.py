@@ -37,14 +37,14 @@ ALLOWED_HOSTS = ['*']
 CORS_ORIGIN_ALLOW_ALL = True
 
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:5173',
+    'https://slideee.ru',
     'http://127.0.0.1:5173',
     'http://localhost:8001',
-    'https://slideeeeeee.ru'
+    'http://localhost:5173'
 ]
 
 CSRF_TRUSTED_ORIGINS = [
-    'https://slideeeeeee.ru',
+    'https://slideee.ru',
     'http://localhost:8001',
 ]
 
@@ -182,4 +182,4 @@ OPENAI_CLIENT = OpenAI(
 
 PAYKEEPER_USER = "admin"
 PAYKEEPER_PASSWORD = "67f53b702716"
-SERVER_PAYKEEPER = "https://slideeeeeee.server.paykeeper.ru"
+SERVER_PAYKEEPER = "https://slideee.server.paykeeper.ru"
