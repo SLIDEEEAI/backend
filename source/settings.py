@@ -182,4 +182,6 @@ OPENAI_CLIENT = OpenAI(
 
 PAYKEEPER_USER = "admin"
 PAYKEEPER_PASSWORD = "67f53b702716"
+
 SERVER_PAYKEEPER = "https://slideee.server.paykeeper.ru"
+

@@ -33,6 +33,12 @@ from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
+
+from openai_services import (
+    GenerateImagesAPIView,
+    GenerateTextApiView
+)
+
 urlpatterns = [
     path('users/registration', RegistrationView.as_view()),
     path('users/login', TokenObtainPairView.as_view()),
@@ -59,6 +65,12 @@ urlpatterns = [
     path("presentation/slide_heading/generate", GenerateSlideHeadingView.as_view()),
     path("presentation/images/generate", GenerateImagesView.as_view()),
     path('presentation/gpt/request', GPTRequestView.as_view()),
+
+    path('generate/text', GenerateTextApiView.TextGenerationAPIView.as_view()),
+    path('generate/image', GenerateImagesAPIView.ImageGenerationAPIView.as_view()),
+
+    # Новый URL для обработки Paykeeper 
+
     path('presentation/decrement', DecrementPresentationView.as_view()),
     # Новый URL для обработки Paykeeper
     path('paykeeper/webhook/', PaykeeperWebhookView.as_view(), name='paykeeper-webhook'),

@@ -8,7 +8,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.contrib.auth import authenticate, login
-import openai  # Добавляем импорт openai
+import openai  # Добавляем импорт openai_services
 
 import json
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -53,7 +53,6 @@ import json
 
 from django.http import JsonResponse
 from .models import User
-
 
 class PaykeeperWebhookView(APIView):
     @atomic_transaction.atomic
@@ -113,6 +112,7 @@ class PaykeeperWebhookView(APIView):
 
 
 class CreatePaymentLinkView(APIView):
+
     authentication_classes = (JWTAuthentication, )
     permission_classes = (IsAuthenticated, )
 
@@ -120,6 +120,7 @@ class CreatePaymentLinkView(APIView):
         try:
             user = request.user
             # user = User.objects.all().last()
+
             transaction_uuid = uuid.uuid4()
             amount = request.data.get('pay_amount')
 
@@ -195,7 +196,6 @@ class CreatePaymentLinkView(APIView):
             status=Transaction.Statuses.WAITING_PAYMENT,
             payment_url=payment_link,
         )
-
 
 class DecrementPresentationView(APIView):
     authentication_classes = (JWTAuthentication, )
@@ -363,6 +363,7 @@ class GenerateImagesView(APIView):
         
         saved_images = []
         for url in image_urls:
+
             # Загружаем изображение
             response = requests.get(url)
             if response.status_code == 200:
