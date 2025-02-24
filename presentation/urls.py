@@ -70,6 +70,7 @@ urlpatterns = [
     path('generate/image', GenerateImagesAPIView.ImageGenerationAPIView.as_view()),
 
     # Новый URL для обработки Paykeeper 
+
     path('presentation/decrement', DecrementPresentationView.as_view()),
     # Новый URL для обработки Paykeeper
     path('paykeeper/webhook/', PaykeeperWebhookView.as_view(), name='paykeeper-webhook'),

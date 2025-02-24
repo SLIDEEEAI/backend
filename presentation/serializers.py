@@ -169,7 +169,7 @@ class GetPresentationSerializer(serializers.Serializer):
 class PaykeeperWebhookSerializer(serializers.Serializer):
     orderid = serializers.UUIDField(required=True)
     status = serializers.CharField(required=True)
-    sum = serializers.DecimalField(max_digits=10, decimal_places=2, required=True)
+    pay_amount = serializers.DecimalField(max_digits=10, decimal_places=2, required=True)
 
 
 class UserPresentationSerializer(serializers.ModelSerializer):

@@ -54,29 +54,32 @@ import json
 from django.http import JsonResponse
 from .models import User
 
-
 class PaykeeperWebhookView(APIView):
     @atomic_transaction.atomic
     def post(self, request):
-        serializer = PaykeeperWebhookSerializer(data=request.data)
+        serializer = PaykeeperWebhookSerializer(data=request.data, many=True)
+
         if not serializer.is_valid():
             return self.create_error_response('Invalid data', serializer.errors)
-        transaction_data = serializer.validated_data
-        order_id = transaction_data['orderid']
-        amount = transaction_data['sum']
 
-        transaction = self.get_transaction(order_id)
-        if transaction.status == Transaction.Statuses.COMPLETED:
-            return JsonResponse({'status': 'success'}, status=200)
+        for transaction_data in serializer.validated_data:
+            order_id = transaction_data['orderid']
+            status = transaction_data['status']
+            amount = transaction_data['pay_amount']
 
-        if not transaction:
-            return self.create_error_response('Transaction not found', {'orderid': order_id})
+            transaction = self.get_transaction(order_id)
+            if transaction.status == Transaction.Statuses.COMPLETED:
+                continue
 
-        if not self.validate_amount(transaction, amount):
-            return self.create_error_response('Amount mismatch',
-                                              {'expected': transaction.amount, 'received': amount})
+            if not transaction:
+                return self.create_error_response('Transaction not found', {'orderid': order_id})
 
-        self.complete_transaction(transaction, amount)
+            if status == 'success':
+                if not self.validate_amount(transaction, amount):
+                    return self.create_error_response('Amount mismatch',
+                                                      {'expected': transaction.amount, 'received': amount})
+
+                self.complete_transaction(transaction, amount)
 
         return JsonResponse({'status': 'success'}, status=200)
 
@@ -109,13 +112,15 @@ class PaykeeperWebhookView(APIView):
 
 
 class CreatePaymentLinkView(APIView):
-    # authentication_classes = (JWTAuthentication, )
-    # permission_classes = (IsAuthenticated, )
+
+    authentication_classes = (JWTAuthentication, )
+    permission_classes = (IsAuthenticated, )
 
     def post(self, request):
         try:
-            # user = request.user
-            user = User.objects.all().last()
+            user = request.user
+            # user = User.objects.all().last()
+
             transaction_uuid = uuid.uuid4()
             amount = request.data.get('pay_amount')
 
@@ -191,7 +196,6 @@ class CreatePaymentLinkView(APIView):
             status=Transaction.Statuses.WAITING_PAYMENT,
             payment_url=payment_link,
         )
-
 
 class DecrementPresentationView(APIView):
     authentication_classes = (JWTAuthentication, )
@@ -387,19 +391,22 @@ class GenerateImagesView(APIView):
 class RegistrationView(APIView):
     permission_classes = (AllowAny,)
     serializer_class = RegistrationSerializer
+
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.save()
+        user_data = serializer.save()
 
-        # Создать пользователя и установить баланс
+        # Установите баланс пользователя
+        user = User.objects.get(email=user_data['email'])
         initial_balance = request.data.get('balance', 1000)  # По умолчанию 1000
-        User.objects.create(email=request.data['email'], balance=initial_balance)
+        user.balance = initial_balance
+        user.save()
 
         response_data = {
             'user_id': user.id,  # Возвращаем идентификатор пользователя вместе с ответом
-            'access': str(serializer.validated_data['access']),
-            'refresh': str(serializer.validated_data['refresh']),
+            'access': user_data['token']['access'],
+            'refresh': user_data['token']['refresh'],
         }
         return Response(response_data, status=status.HTTP_201_CREATED)
 
