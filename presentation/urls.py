@@ -26,7 +26,7 @@ from .views import (
     DecrementPresentationView,
     TariffListView,
     CurrentUserView,
-    CreateNewEmptyProject,
+    CreateNewEmptyProject, UpdateBalanceAPIView, PromoCodeApplyAPIView,
 )
 
 from rest_framework_simplejwt.views import (
@@ -78,4 +78,6 @@ urlpatterns = [
     path('tariffs/', TariffListView.as_view(), name='tariff-list'),
     path('current_user/', CurrentUserView.as_view(), name='current-user'),
     path('presentation/new', CreateNewEmptyProject.as_view()),
+    path('users/update_balance', UpdateBalanceAPIView.as_view()),
+    path('users/promocode', PromoCodeApplyAPIView.as_view()),
 ]

@@ -13,11 +13,13 @@ import openai  # Добавляем импорт openai_services
 import json
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import AccessToken
-from presentation.models import User, Presentation, Transaction, Tariff
+from presentation.models import User, Presentation, Transaction, Tariff, BalanceHistory, Balance
 from source.settings import PAYKEEPER_USER, PAYKEEPER_PASSWORD, SERVER_PAYKEEPER
 from django.shortcuts import get_object_or_404
 from django.db import transaction as atomic_transaction
-from rest_framework import generics
+from rest_framework import viewsets, generics, serializers
+from decimal import Decimal
+
 
 from .serializers import (
     RegistrationSerializer,
@@ -27,7 +29,7 @@ from .serializers import (
     GPTRequestSerializer,
     GetPresentationSerializer,
     PaykeeperWebhookSerializer,
-    TariffSerializer, UserSerializer,
+    TariffSerializer, UserSerializer, BalanceHistorySerializer, PromoCodeApplySerializer,
 )
 
 from .services import (
@@ -94,7 +96,7 @@ class PaykeeperWebhookView(APIView):
     def complete_transaction(self, transaction, amount):
         """Complete the transaction, update user's balance and presentation count."""
         transaction.status = Transaction.Statuses.COMPLETED
-        transaction.user.balance = F('balance') + transaction.amount
+        transaction.user.balance.amount = F('balance') + transaction.amount
 
         tariff = Tariff.objects.filter(price=amount).first()
         if tariff:
@@ -222,7 +224,7 @@ class GPTRequestView(APIView):
 
             # Здесь обрабатываем запрос к GPT
             # В данном случае просто возвращаем его обратно в ответе
-            
+
             # gpt_response = f"Привет! Вы ввели запрос: '{gpt_request}' и отправили его на обработку GPT."
             gpt_response = generate_custom_request(gpt_request)
 
@@ -244,8 +246,8 @@ class GetUserBalanceView(APIView):
             user = User.objects.filter(id = request.user.id).first()
             if user:
                 return Response(
-                    {   
-                        "balance" : user.balance
+                    {
+                        "balance" : user.balance.amount
                     },
                     status=status.HTTP_201_CREATED
                 )
@@ -270,7 +272,7 @@ class LoginView(APIView):
 
             # Сохраняем айди пользователя в локальное хранилище
             request.session['user_id'] = user.id
-            
+
             return Response({'detail': 'Authenticated'}, status=200)
         else:
             return Response({'error': 'Invalid credentials'}, status=400)
@@ -358,9 +360,9 @@ class GenerateImagesView(APIView):
     def post(self, request):
         presentation_theme = request.data.get('presentation_theme')
         num_images = request.data.get('num_images', 1)
-        
+
         image_urls = generate_images(presentation_theme, num_images)
-        
+
         saved_images = []
         for url in image_urls:
 
@@ -369,21 +371,21 @@ class GenerateImagesView(APIView):
             if response.status_code == 200:
                 # Генерируем уникальное имя файла
                 file_name = f"{uuid.uuid4()}.jpg"
-                
+
                 # Сохраняем изображение
                 path = default_storage.save(f"generated_images/{file_name}", ContentFile(response.content))
-                
+
                 # Создаем запись в базе данных
                 image = GeneratedImage.objects.create(
                     theme=presentation_theme,
                     image=path
                 )
-                
+
                 saved_images.append({
                     'id': image.id,
                     'url': request.build_absolute_uri(image.image.url)
                 })
-        
+
         return Response({'images': saved_images}, status=status.HTTP_200_OK)
 #старые
 
@@ -399,8 +401,8 @@ class RegistrationView(APIView):
 
         # Установите баланс пользователя
         user = User.objects.get(email=user_data['email'])
-        initial_balance = request.data.get('balance', 1000)  # По умолчанию 1000
-        user.balance = initial_balance
+        balance = Balance.objects.create(amount=1000)
+        user.balance = balance
         user.save()
 
         response_data = {
@@ -463,19 +465,19 @@ class GenerateSlidesView(APIView):
 
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        
+
         # Получаем пользователя
         user = request.user
 
         # Проверяем, достаточно ли у пользователя средств для создания презентации
-        if user.balance < 10:
+        if user.balance.amount < 10:
             return Response(
                 {"error": "Insufficient funds"},
                 status=status.HTTP_402_PAYMENT_REQUIRED
             )
 
         # Списываем средства
-        user.balance -= 10
+        user.balance.amount -= 10
         user.save()
 
         # Создаем презентацию
@@ -521,7 +523,7 @@ class GetPresentationView(APIView):
                         "id": presentation.id,
                         "author": presentation.user.id,
                         "json": json.loads(presentation.json),
-                        "balance" : presentation.user.balance
+                        "balance" : presentation.user.balance.amount
                     },
                     status=status.HTTP_201_CREATED
                 )
@@ -658,3 +660,55 @@ class CreateNewEmptyProject(APIView):
             )
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+class UpdateBalanceAPIView(APIView):
+    permission_classes = (IsAuthenticated, )
+
+    def post(self, request):
+        # request.user = User.objects.get(email='dddcfffd@gmail.com') # убери потом
+        serializer = BalanceHistorySerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            data = serializer.validated_data
+
+            balance = request.user.balance
+
+            # balance = User.objects.get(email='dddcfffd@gmail.com').balance # убери потом
+
+            # Изменяем баланс в зависимости от типа изменения
+            if data['change_type'] == BalanceHistory.ChangeType.INCREASE:
+                balance.amount += Decimal(data['amount_change'])
+            elif data['change_type'] == BalanceHistory.ChangeType.DECREASE:
+                balance.amount -= Decimal(data['amount_change'])
+
+            # Сохраняем изменения баланса
+            balance.save()
+
+            # Создаем запись в истории изменений баланса
+            BalanceHistory.objects.create(
+                amount_change=data['amount_change'],
+                change_type=data['change_type'],
+                change_reason=data['change_reason'],
+                balance=balance,
+            )
+
+            return Response({"detail": "Balance updated successfully."}, status=status.HTTP_200_OK)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PromoCodeApplyAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        # request.user = User.objects.get(email='dddcfffd@gmail.com') # убери потом
+        serializer = PromoCodeApplySerializer(data=request.data)
+
+        if serializer.is_valid():
+            promo_code = serializer.save(user=request.user)
+            return Response(
+                {"detail": f"Промокод '{promo_code.code}' успешно применён."},
+                status=status.HTTP_200_OK
+            )
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

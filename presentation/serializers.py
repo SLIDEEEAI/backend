@@ -4,11 +4,14 @@ from django.forms.models import model_to_dict
 from rest_framework import serializers
 from collections import OrderedDict
 
-from .models import Roles, Presentation, Tariff
+from .models import Roles, Presentation, Tariff, BalanceHistory, PromoCode, PromoCodeUsage
+from rest_framework.serializers import ValidationError
 
 from .services import generate_slides_theme, generate_slides_text
 
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from datetime import date
+
 
 from rest_framework import serializers
 from .models import User
@@ -188,3 +191,66 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'role', 'is_active', 'is_staff', 'balance', 'presentation', 'created_at', 'updated_at']
+
+
+class BalanceHistorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BalanceHistory
+        fields = ['amount_change', 'change_type', 'change_reason']
+
+    def validate(self, data):
+        user = self.context['request'].user
+        balance = user.balance  # Предполагается, что у пользователя есть связь с балансом
+        amount_change = data.get('amount_change')
+        change_type = data.get('change_type')
+
+        if change_type == BalanceHistory.ChangeType.DECREASE and balance.amount < amount_change:
+            raise ValidationError("Недостаточно средств на балансе.")
+
+        return data
+
+
+class PromoCodeApplySerializer(serializers.Serializer):
+    promo_code = serializers.CharField(max_length=255, required=True)
+
+    def validate_promo_code(self, value):
+        try:
+            promo_code = PromoCode.objects.get(code=value, is_active=True)
+        except PromoCode.DoesNotExist:
+            raise serializers.ValidationError("Промокод не найден или неактивен.")
+
+        # Проверка срока действия
+        if promo_code.expiration_date < date.today():
+            raise serializers.ValidationError("Промокод истёк.")
+
+        # Сохранение промокода для использования позже
+        self.promo_code = promo_code
+        return value
+
+    def save(self, user):
+        promo_code = self.promo_code
+
+        # Проверка одноразового использования
+        # breakpoint()
+        if promo_code.usage_type == PromoCode.SINGLE_USE:
+            if PromoCodeUsage.objects.filter(promo_code=promo_code, user=user).exists():
+                raise serializers.ValidationError("Этот промокод уже был использован вами.")
+
+        # Проверка лимита использования для многоразового промокода
+        if promo_code.usage_type == PromoCode.MULTI_USE and promo_code.usage_limit <= 0:
+            raise serializers.ValidationError("Лимит использования этого промокода исчерпан.")
+
+        # Применение промокода (пример: добавление токенов пользователю)
+        if hasattr(user, 'balance'):
+            user.balance.amount += promo_code.token_amount
+            user.balance.save()
+
+        # Создание записи об использовании
+        PromoCodeUsage.objects.create(user=user, promo_code=promo_code)
+
+        # Уменьшение лимита использования, если это многоразовый промокод
+        if promo_code.usage_type == PromoCode.MULTI_USE:
+            promo_code.usage_limit -= 1
+            promo_code.save()
+
+        return promo_code
