@@ -76,6 +76,13 @@ class User(AbstractBaseUser, PermissionsMixin):
     updated_at = models.DateTimeField(auto_now=True)
     balance = models.OneToOneField(Balance, on_delete=models.DO_NOTHING, related_name='user_balance', null=True)
     presentation = models.IntegerField(default=0)
+    referrer = models.ForeignKey(
+        'self',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='referrals'
+    )
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ["username"]

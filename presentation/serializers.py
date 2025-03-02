@@ -38,10 +38,16 @@ class RegistrationSerializer(serializers.ModelSerializer):
     )
     role = serializers.IntegerField(write_only=True)
     token = serializers.DictField(read_only=True)
+    referral_user = serializers.SlugRelatedField(
+        slug_field='pk',
+        queryset=User.objects.all(),
+        write_only=False,
+        required=False,
+    )
 
     class Meta:
         model = User
-        fields = ['email', 'username', 'role', 'password', 'token']
+        fields = ['email', 'username', 'role', 'password', 'token', 'referral_user']
 
     def validate(self, attrs: OrderedDict):
         if attrs["role"] not in [x.id for x in Roles.objects.all()]:
@@ -53,6 +59,8 @@ class RegistrationSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
+        if validated_data.get("referral_user"):
+            validated_data.pop("referral_user")
         role = validated_data.pop("role")
         role = Roles.objects.get(id=role)
         validated_data.update({"role": role})

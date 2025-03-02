@@ -1,26 +1,22 @@
-import random
-
 from django.db.models import F
 from datetime import datetime
 
+from django.db.transaction import atomic
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
-from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.contrib.auth import authenticate, login
-import openai  # Добавляем импорт openai_services
-
-import json
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import AccessToken
-from presentation.models import User, Presentation, Transaction, Tariff, BalanceHistory, Balance
+
+from main.models import Config
+from presentation.models import Presentation, Transaction, Tariff, BalanceHistory, Balance
 from source.settings import PAYKEEPER_USER, PAYKEEPER_PASSWORD, SERVER_PAYKEEPER
 from django.shortcuts import get_object_or_404
 from django.db import transaction as atomic_transaction
-from rest_framework import viewsets, generics, serializers
+from rest_framework import generics
 from decimal import Decimal
 
 
@@ -402,23 +398,36 @@ class RegistrationView(APIView):
     permission_classes = (AllowAny,)
     serializer_class = RegistrationSerializer
 
+    @swagger_auto_schema(request_body=RegistrationSerializer)
+    @atomic
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
         user_data = serializer.save()
+        referrer: User = serializer.validated_data.get('referral_user')
 
         # Установите баланс пользователя
         user = User.objects.get(email=user_data['email'])
         balance = Balance.objects.create(amount=1000)
         user.balance = balance
+        if referrer:
+            user.referrer = referrer
+            referrer.balance.amount = F('amount') + Config.get_instance().referral_bonus
+            referrer.balance.save(update_fields=['amount'])
+            BalanceHistory.objects.create(
+                amount_change=Config.get_instance().referral_bonus,
+                change_type=BalanceHistory.ChangeType.INCREASE,
+                change_reason=BalanceHistory.Reason.REFERRAL_TOP_UP,
+                balance=referrer.balance,
+            )
         user.save()
-
         response_data = {
             'user_id': user.id,  # Возвращаем идентификатор пользователя вместе с ответом
             'access': user_data['token']['access'],
             'refresh': user_data['token']['refresh'],
         }
         return Response(response_data, status=status.HTTP_201_CREATED)
+
 
 class ChangePasswordView(APIView):
     authentication_classes = (JWTAuthentication, )
