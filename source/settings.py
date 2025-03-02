@@ -174,10 +174,7 @@ SIMPLE_JWT = {
 
 OPENAI_CLIENT = OpenAI(
     api_key="",
-    http_client=httpx.Client(proxies={
-        "http://": "http://109.248.32.81:3128",
-        "https://": "http://109.248.32.81:3128"
-    })
+    http_client=httpx.Client(proxy='http://109.248.32.81:3128')
 )
 
 PAYKEEPER_USER = "admin"
