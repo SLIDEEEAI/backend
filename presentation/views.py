@@ -2,6 +2,9 @@ import random
 
 from django.db.models import F
 from datetime import datetime
+
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -29,7 +32,12 @@ from .serializers import (
     GPTRequestSerializer,
     GetPresentationSerializer,
     PaykeeperWebhookSerializer,
-    TariffSerializer, UserSerializer, BalanceHistorySerializer, PromoCodeApplySerializer,
+    TariffSerializer,
+    UserSerializer,
+    BalanceHistorySerializer,
+    PromoCodeApplySerializer,
+    PresentationSerializer,
+    SharedPresentationRequestSerializer,
 )
 
 from .services import (
@@ -506,6 +514,35 @@ class GetPresentationView(APIView):
 
     serializer_class = GetPresentationSerializer
 
+    @swagger_auto_schema(
+        operation_summary="Получение презентации",
+        operation_description="Возвращает данные о презентации по её ID, если пользователь является её владельцем.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=["id"],
+            properties={
+                "id": openapi.Schema(type=openapi.TYPE_INTEGER, description="ID презентации"),
+            },
+        ),
+        responses={
+            201: openapi.Response(
+                description="Успешный ответ",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "id": openapi.Schema(type=openapi.TYPE_INTEGER, description="ID презентации"),
+                        "author": openapi.Schema(type=openapi.TYPE_INTEGER, description="ID автора"),
+                        "json": openapi.Schema(type=openapi.TYPE_OBJECT, description="JSON-содержимое презентации"),
+                        "shared_uid": openapi.Schema(type=openapi.TYPE_STRING,
+                                                     description="Уникальный идентификатор ссылки на презентацию"),
+                        "balance": openapi.Schema(type=openapi.TYPE_NUMBER, description="Баланс пользователя"),
+                    },
+                ),
+            ),
+            400: openapi.Response(description="Презентация не найдена"),
+            403: openapi.Response(description="Доступ к чужому проекту запрещён"),
+        },
+    )
     def post(self, request):
         if request and request.data["id"]:
             presentation = Presentation.objects.filter(id=request.data["id"]).first()
@@ -523,7 +560,8 @@ class GetPresentationView(APIView):
                         "id": presentation.id,
                         "author": presentation.user.id,
                         "json": json.loads(presentation.json),
-                        "balance" : presentation.user.balance.amount
+                        "shared_uid": str(presentation.share_link_uid),
+                        "balance" : presentation.user.balance
                     },
                     status=status.HTTP_201_CREATED
                 )
@@ -531,6 +569,20 @@ class GetPresentationView(APIView):
             data="Presentation not found!",
             status=400
         )
+
+
+class GetPresentationSharedView(APIView):
+    authentication_classes = (JWTAuthentication, )
+    permission_classes = (AllowAny,)
+    queryset = Presentation.objects.select_related('user')
+    serializer_class = PresentationSerializer
+
+    @swagger_auto_schema(request_body=SharedPresentationRequestSerializer)
+    def post(self, request):
+        serializer = SharedPresentationRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(self.serializer_class(serializer.validated_data['presentation']).data)
+
 
 class SavePresentationView(APIView):
     authentication_classes = (JWTAuthentication, )

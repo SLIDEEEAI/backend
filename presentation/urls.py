@@ -26,7 +26,10 @@ from .views import (
     DecrementPresentationView,
     TariffListView,
     CurrentUserView,
-    CreateNewEmptyProject, UpdateBalanceAPIView, PromoCodeApplyAPIView,
+    CreateNewEmptyProject,
+    GetPresentationSharedView,
+    UpdateBalanceAPIView,
+    PromoCodeApplyAPIView,
 )
 
 from rest_framework_simplejwt.views import (
@@ -48,6 +51,7 @@ urlpatterns = [
     path("presentation/themes/generate", GenerateThemesView.as_view()),
     path("presentation/slides/generate", GenerateSlidesView.as_view()),
     path("presentation/get", GetPresentationView.as_view()),
+    path("presentation/shared/get", GetPresentationSharedView.as_view()),
     path("presentation/save", SavePresentationView.as_view()),
     path("presentation/delete", DeletePresentationView.as_view()),
     path("presentation/export", ExportPresentationView.as_view()),

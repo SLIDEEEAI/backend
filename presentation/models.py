@@ -116,6 +116,7 @@ class Presentation(models.Model):
     date_edited = models.DateTimeField(null=True)
     theme = models.IntegerField(null=True)
     json = models.JSONField()
+    share_link_uid = models.UUIDField(default=uuid.uuid4, editable=False)
 
     created_at = models.DateTimeField(auto_now_add=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True, blank=True)

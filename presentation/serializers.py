@@ -1,7 +1,6 @@
 from django.contrib.auth import authenticate, password_validation
 from django.forms.models import model_to_dict
 
-from rest_framework import serializers
 from collections import OrderedDict
 
 from .models import Roles, Presentation, Tariff, BalanceHistory, PromoCode, PromoCodeUsage
@@ -173,6 +172,24 @@ class PaykeeperWebhookSerializer(serializers.Serializer):
     orderid = serializers.UUIDField(required=True)
     status = serializers.CharField(required=True)
     pay_amount = serializers.DecimalField(max_digits=10, decimal_places=2, required=True)
+
+
+class SharedPresentationRequestSerializer(serializers.Serializer):
+    presentation = serializers.SlugRelatedField(
+        slug_field='share_link_uid',
+        queryset=Presentation.objects.all(),
+        read_only=False,
+        required=True,
+    )
+
+
+class PresentationSerializer(serializers.ModelSerializer):
+    author = serializers.IntegerField(source='user.pk')
+    balance = serializers.IntegerField(source='user.balance')
+
+    class Meta:
+        model = Presentation
+        fields = ('id', 'author', 'json', 'balance')
 
 
 class UserPresentationSerializer(serializers.ModelSerializer):

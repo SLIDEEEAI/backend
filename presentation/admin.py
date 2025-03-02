@@ -8,7 +8,7 @@ admin.site.register([
 
 @admin.register(Presentation)
 class PresentationAdmin(admin.ModelAdmin):
-    list_display = ('id', 'user', 'created_at', 'updated_at',)
+    list_display = ('id', 'user', 'created_at', 'updated_at', 'share_link_uid')
 
 @admin.register(Transaction)
 class TransactionAdmin(admin.ModelAdmin):
