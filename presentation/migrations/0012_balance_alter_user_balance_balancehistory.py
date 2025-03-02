@@ -5,6 +5,11 @@ import uuid
 from django.db import migrations, models
 
 
+def clear_user_balance(apps, schema_editor):
+    User = apps.get_model('presentation', 'User')
+    User.objects.update(balance=None)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -25,6 +30,12 @@ class Migration(migrations.Migration):
                 'db_table': 'balance',
             },
         ),
+        migrations.AddField(
+            model_name='user',
+            name='balance',
+            field=models.IntegerField(default=100, null=True),
+        ),
+        migrations.RunPython(clear_user_balance, reverse_code=migrations.RunPython.noop),
         migrations.AlterField(
             model_name='user',
             name='balance',
