@@ -5,9 +5,17 @@ import uuid
 from django.db import migrations, models
 
 
-def clear_user_balance(apps, schema_editor):
-    User = apps.get_model('presentation', 'User')
-    User.objects.update(balance=None)
+def migrate_user_balance(apps, schema_editor):
+    User = apps.get_model("presentation", "User")
+    Balance = apps.get_model("presentation", "Balance")
+
+    for user in User.objects.all():
+        if user.balance is not None:
+            balance = Balance.objects.create(amount=user.balance)
+        else:
+            balance = Balance.objects.create(amount=1000)
+        user.balance = balance
+        user.save(update_fields=["balance"])
 
 
 class Migration(migrations.Migration):
@@ -35,7 +43,12 @@ class Migration(migrations.Migration):
             name='balance',
             field=models.IntegerField(default=100, null=True),
         ),
-        migrations.RunPython(clear_user_balance, reverse_code=migrations.RunPython.noop),
+        migrations.AddField(
+            model_name='user',
+            name='balance',
+            field=models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, to='presentation.balance'),
+        ),
+        migrations.RunPython(migrate_user_balance, reverse_code=migrations.RunPython.noop),
         migrations.AlterField(
             model_name='user',
             name='balance',
