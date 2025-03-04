@@ -11,6 +11,8 @@ from io import BytesIO
 import requests
 from django.conf import settings
 from django.core.files.base import File, ContentFile
+from django.core.mail import send_mail
+from django.utils.crypto import get_random_string
 
 from openai.types.chat import ChatCompletion
 
@@ -23,7 +25,7 @@ from pptx.enum.shapes import MSO_SHAPE_TYPE
 
 from datetime import datetime
 
-from .models import Picture
+from .models import Picture, EmailVerificationToken
 import requests
 
 
@@ -543,3 +545,22 @@ def export_presentation(presentation, presentation_type) -> str:
     url_path = settings.BASE_URL + '/media/pptx' + name
 
     return url_path
+
+
+def send_verification_email(user):
+    token, created = EmailVerificationToken.objects.get_or_create(
+        user=user, defaults={'token': get_random_string(64)}
+    )
+    verification_link = f"{settings.FRONTEND_URL}/verify-email/?token={token.token}"
+    subject = "Confirm Your Email"
+    message = f"Click the link to confirm your email: {verification_link}"
+    html_message = f"""
+        <html>
+            <body>
+                <p>Click the link below to confirm your email:</p>
+                <a href="{verification_link}">Confirm Email</a>
+            </body>
+        </html>
+    """
+    res = send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.email], html_message=html_message)
+    print(res)

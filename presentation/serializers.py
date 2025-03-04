@@ -294,3 +294,13 @@ class PromoCodeApplySerializer(serializers.Serializer):
             promo_code.save()
 
         return promo_code
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    token = serializers.CharField()
+    email = serializers.EmailField()
+    new_password = serializers.CharField()
+
+
+class VerifyEmailSerializer(serializers.Serializer):
+    token = serializers.CharField()

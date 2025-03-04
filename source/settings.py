@@ -133,7 +133,11 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.BasicAuthentication',
         'rest_framework.authentication.SessionAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication'
-    ]
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'request-reset-password': '5/minute',
+        'enter-request-reset-password': '10/minute',
+    }
 }
 
 AUTH_USER_MODEL = 'presentation.User'
@@ -182,4 +186,14 @@ PAYKEEPER_USER = "admin"
 PAYKEEPER_PASSWORD = "67f53b702716"
 
 SERVER_PAYKEEPER = "https://slideee.server.paykeeper.ru"
+
+# SMTP настройки в settings.py
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'EMAIL'
+EMAIL_HOST_PASSWORD = 'PASSWORD'
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+FRONTEND_URL = "https://slideee.ru"
 

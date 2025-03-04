@@ -1,7 +1,10 @@
+from django.conf import settings
+from django.core.mail import send_mail
 from django.db.models import F
 from datetime import datetime
 
 from django.db.transaction import atomic
+from django.utils.crypto import get_random_string
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -12,7 +15,8 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import AccessToken
 
 from main.models import Config
-from presentation.models import Presentation, Transaction, Tariff, BalanceHistory, Balance, PromoCode
+from presentation.models import Presentation, Transaction, Tariff, BalanceHistory, Balance, PromoCode, \
+    EmailVerificationToken, PasswordResetToken
 from source.settings import PAYKEEPER_USER, PAYKEEPER_PASSWORD, SERVER_PAYKEEPER
 from django.shortcuts import get_object_or_404
 from django.db import transaction as atomic_transaction
@@ -33,7 +37,7 @@ from .serializers import (
     BalanceHistorySerializer,
     PromoCodeApplySerializer,
     PresentationSerializer,
-    SharedPresentationRequestSerializer,
+    SharedPresentationRequestSerializer, ResetPasswordSerializer, VerifyEmailSerializer,
 )
 
 from .services import (
@@ -51,7 +55,7 @@ from .services import (
     generate_slide_heading,
     generate_images,
     generate_images2,
-    generate_custom_request,
+    generate_custom_request, send_verification_email,
 )
 
 import base64
@@ -59,6 +63,8 @@ import json
 
 from django.http import JsonResponse
 from .models import User
+from .trottles import EnterPasswordReset, RequestToResetPassword
+
 
 class PaykeeperWebhookView(APIView):
     @atomic_transaction.atomic
@@ -437,7 +443,63 @@ class RegistrationView(APIView):
             promocode_serializer = PromoCodeApplySerializer(data={'promo_code': promocode.code})
             promocode_serializer.is_valid(raise_exception=True)
             promocode_serializer.save(user)
+        send_verification_email(user)
         return Response(response_data, status=status.HTTP_201_CREATED)
+
+
+class VerifyEmailView(APIView):
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(request_body=VerifyEmailSerializer)
+    def post(self, request):
+        serializer = VerifyEmailSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        token = serializer.validated_data['token']
+
+        verification_token = get_object_or_404(EmailVerificationToken, token=token)
+        verification_token.user.email_verified = True
+        verification_token.user.save()
+        verification_token.delete()
+
+        return Response({"message": "Email successfully verified"}, status=status.HTTP_200_OK)
+
+
+class RequestPasswordResetView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = (RequestToResetPassword, )
+
+    def post(self, request):
+        user = request.user
+        token = get_random_string(64)
+        PasswordResetToken.objects.create(user=user, token=token)
+        reset_link = f"{settings.FRONTEND_URL}/reset-password/?token={token}&email={user.email}"
+        send_mail(
+            "Reset Your Password",
+            f"Click the link to reset your password: {reset_link}",
+            settings.DEFAULT_FROM_EMAIL,
+            [user.email]
+        )
+        return Response({"message": "Password reset email sent"}, status=status.HTTP_200_OK)
+
+
+class ResetPasswordView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = (EnterPasswordReset, )
+
+    @swagger_auto_schema(request_body=ResetPasswordSerializer)
+    def post(self, request):
+        serializer = ResetPasswordSerializer(data=request.data)
+        if serializer.is_valid():
+            token = serializer.validated_data["token"]
+            email = serializer.validated_data["email"]
+            new_password = serializer.validated_data["new_password"]
+            reset_token = get_object_or_404(PasswordResetToken, token=token, user__email=email)
+            user = reset_token.user
+            user.set_password(new_password)
+            user.save()
+            reset_token.delete()
+            return Response({"message": "Password successfully reset"}, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class ChangePasswordView(APIView):
