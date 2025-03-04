@@ -12,7 +12,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import AccessToken
 
 from main.models import Config
-from presentation.models import Presentation, Transaction, Tariff, BalanceHistory, Balance
+from presentation.models import Presentation, Transaction, Tariff, BalanceHistory, Balance, PromoCode
 from source.settings import PAYKEEPER_USER, PAYKEEPER_PASSWORD, SERVER_PAYKEEPER
 from django.shortcuts import get_object_or_404
 from django.db import transaction as atomic_transaction
@@ -405,6 +405,7 @@ class RegistrationView(APIView):
         serializer.is_valid(raise_exception=True)
         user_data = serializer.save()
         referrer: User = serializer.validated_data.get('referral_user')
+        promocode: PromoCode = serializer.validated_data.get('promocode')
 
         # Установите баланс пользователя
         user = User.objects.get(email=user_data['email'])
@@ -432,6 +433,10 @@ class RegistrationView(APIView):
             'access': user_data['token']['access'],
             'refresh': user_data['token']['refresh'],
         }
+        if promocode:
+            promocode_serializer = PromoCodeApplySerializer(data={'promo_code': promocode.code})
+            promocode_serializer.is_valid(raise_exception=True)
+            promocode_serializer.save(user)
         return Response(response_data, status=status.HTTP_201_CREATED)
 
 
@@ -767,8 +772,9 @@ class UpdateBalanceAPIView(APIView):
 class PromoCodeApplyAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @swagger_auto_schema(request_body=PromoCodeApplySerializer)
+    @atomic
     def post(self, request):
-        # request.user = User.objects.get(email='dddcfffd@gmail.com') # убери потом
         serializer = PromoCodeApplySerializer(data=request.data)
 
         if serializer.is_valid():

@@ -282,6 +282,7 @@ class BalanceHistory(BaseModel):
             models.Index(fields=['created_at', 'change_type', 'change_reason'], name='balance_history_index')
         ]
         db_table = 'balance_history'
+        ordering = ('-created_at',)
 
 
 class PromoCode(models.Model):

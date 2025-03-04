@@ -1,4 +1,5 @@
 from django.contrib.auth import authenticate, password_validation
+from django.db.models import F
 from django.forms.models import model_to_dict
 
 from collections import OrderedDict
@@ -38,6 +39,12 @@ class RegistrationSerializer(serializers.ModelSerializer):
     )
     role = serializers.IntegerField(write_only=True)
     token = serializers.DictField(read_only=True)
+    promocode = serializers.SlugRelatedField(
+        slug_field='code',
+        queryset=PromoCode.objects.filter(is_active=True),
+        write_only=True,
+        required=False,
+    )
     referral_user = serializers.SlugRelatedField(
         slug_field='pk',
         queryset=User.objects.all(),
@@ -47,7 +54,7 @@ class RegistrationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['email', 'username', 'role', 'password', 'token', 'referral_user']
+        fields = ['email', 'username', 'role', 'password', 'token', 'referral_user', 'promocode']
 
     def validate(self, attrs: OrderedDict):
         if attrs["role"] not in [x.id for x in Roles.objects.all()]:
@@ -61,6 +68,8 @@ class RegistrationSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         if validated_data.get("referral_user"):
             validated_data.pop("referral_user")
+        if validated_data.get("promocode"):
+            validated_data.pop("promocode")
         role = validated_data.pop("role")
         role = Roles.objects.get(id=role)
         validated_data.update({"role": role})
@@ -267,15 +276,21 @@ class PromoCodeApplySerializer(serializers.Serializer):
 
         # Применение промокода (пример: добавление токенов пользователю)
         if hasattr(user, 'balance'):
-            user.balance.amount += promo_code.token_amount
+            user.balance.amount = F('amount') + promo_code.token_amount
             user.balance.save()
+            BalanceHistory.objects.create(
+                amount_change=promo_code.token_amount,
+                change_type=BalanceHistory.ChangeType.INCREASE,
+                change_reason=BalanceHistory.Reason.PROMOTIONAL_CODE,
+                balance=user.balance,
+            )
 
         # Создание записи об использовании
         PromoCodeUsage.objects.create(user=user, promo_code=promo_code)
 
         # Уменьшение лимита использования, если это многоразовый промокод
         if promo_code.usage_type == PromoCode.MULTI_USE:
-            promo_code.usage_limit -= 1
+            promo_code.usage_limit = F('usage_limit') - 1
             promo_code.save()
 
         return promo_code
