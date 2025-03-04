@@ -1,5 +1,7 @@
+import os
 import random
 
+from django.conf import settings
 from django.db.models import F
 from datetime import datetime
 from rest_framework import status
@@ -28,6 +30,7 @@ from .serializers import (
     GetPresentationSerializer,
     PaykeeperWebhookSerializer,
     TariffSerializer, UserSerializer,
+    ImageSerializer
 )
 
 from .services import (
@@ -658,3 +661,31 @@ class CreateNewEmptyProject(APIView):
             )
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+class UploadImage(APIView):
+    authentication_classes = (JWTAuthentication,)
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        serializer = ImageSerializer(data=request.data)
+        if serializer.is_valid():
+            image = serializer.validated_data['image']
+            user_id = request.user.id  # **Получаем ID текущего пользователя**
+            user_folder = os.path.join(settings.MEDIA_ROOT, 'uploads', str(user_id))
+
+            # **Создание папки, если она не существует**
+            os.makedirs(user_folder, exist_ok=True)
+
+            # **Сохранение файла**
+            file_path = os.path.join(user_folder, image.name)
+            with open(file_path, 'wb+') as destination:
+                for chunk in image.chunks():
+                    destination.write(chunk)
+
+            # **Возвращаем путь к сохранённому файлу**
+            url = os.path.join(settings.MEDIA_URL, 'uploads', str(user_id), image.name)
+            return Response({'file_path': url}, status=status.HTTP_201_CREATED)
+        else:
+            print('Ошибки сериализатора:')
+            print(serializer.errors)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
