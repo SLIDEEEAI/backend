@@ -408,8 +408,14 @@ class RegistrationView(APIView):
 
         # Установите баланс пользователя
         user = User.objects.get(email=user_data['email'])
-        balance = Balance.objects.create(amount=1000)
+        balance = Balance.objects.create(amount=Config.get_instance().bonus_to_new_users)
         user.balance = balance
+        BalanceHistory.objects.create(
+            amount_change=Config.get_instance().bonus_to_new_users,
+            change_type=BalanceHistory.ChangeType.INCREASE,
+            change_reason=BalanceHistory.Reason.BONUS_REGISTRATION,
+            balance=balance,
+        )
         if referrer:
             user.referrer = referrer
             referrer.balance.amount = F('amount') + Config.get_instance().referral_bonus

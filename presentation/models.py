@@ -232,6 +232,7 @@ class BalanceHistory(BaseModel):
         SLIDE_PAYMENT = 'SP', 'Оплата Генерации слайдов'
         TOP_UP = 'TU', 'Пополнение'
         BONUS_TOP_UP = 'BT', 'Бонус за пополнение'
+        BONUS_REGISTRATION = 'BNU', 'Бонус за регистрацию'
         REFERRAL_TOP_UP = 'RT', 'Реферальный бонус'
         PROMOTIONAL_CODE = 'PC', 'Промокод'
         ACTIVITY_BONUS = 'AB', 'Бонус за активность'
