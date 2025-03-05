@@ -1,6 +1,9 @@
 from django.urls import path
 from .views import (
     RegistrationView,
+    VerifyEmailView,
+    RequestPasswordResetView,
+    ResetPasswordView,
     ChangePasswordView,
     GenerateThemesView,
     GenerateSlidesView,
@@ -27,7 +30,13 @@ from .views import (
     TariffListView,
     CurrentUserView,
     CreateNewEmptyProject,
+
     UploadImage,
+
+    GetPresentationSharedView,
+    UpdateBalanceAPIView,
+    PromoCodeApplyAPIView,
+
 )
 
 from rest_framework_simplejwt.views import (
@@ -42,6 +51,9 @@ from openai_services import (
 
 urlpatterns = [
     path('users/registration', RegistrationView.as_view()),
+    path('users/verify-email', VerifyEmailView.as_view()),
+    path('users/email/request-reset-password', RequestPasswordResetView.as_view()),
+    path('users/email/reset-password', ResetPasswordView.as_view()),
     path('users/login', TokenObtainPairView.as_view()),
     path('users/change/password', ChangePasswordView.as_view()),
     path('users/login/refresh', TokenRefreshView.as_view()),
@@ -49,6 +61,7 @@ urlpatterns = [
     path("presentation/themes/generate", GenerateThemesView.as_view()),
     path("presentation/slides/generate", GenerateSlidesView.as_view()),
     path("presentation/get", GetPresentationView.as_view()),
+    path("presentation/shared/get", GetPresentationSharedView.as_view()),
     path("presentation/save", SavePresentationView.as_view()),
     path("presentation/delete", DeletePresentationView.as_view()),
     path("presentation/export", ExportPresentationView.as_view()),
@@ -80,5 +93,10 @@ urlpatterns = [
     path('current_user/', CurrentUserView.as_view(), name='current-user'),
     path('presentation/new', CreateNewEmptyProject.as_view()),
 
+
     path('file/upload', UploadImage.as_view(), name='upload_image')
+
+    path('users/update_balance', UpdateBalanceAPIView.as_view()),
+    path('users/promocode', PromoCodeApplyAPIView.as_view()),
+
 ]

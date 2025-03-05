@@ -1,25 +1,33 @@
+
 import os
 import random
 
 from django.conf import settings
+from django.core.mail import send_mail
+
 from django.db.models import F
 from datetime import datetime
-from rest_framework import status
+
+from django.db.transaction import atomic
+from django.utils.crypto import get_random_string
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.contrib.auth import authenticate, login
-import openai  # Добавляем импорт openai_services
-
-import json
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import AccessToken
-from presentation.models import User, Presentation, Transaction, Tariff
+
+from main.models import Config
+from presentation.models import Presentation, Transaction, Tariff, BalanceHistory, Balance, PromoCode, \
+    EmailVerificationToken, PasswordResetToken
 from source.settings import PAYKEEPER_USER, PAYKEEPER_PASSWORD, SERVER_PAYKEEPER
 from django.shortcuts import get_object_or_404
 from django.db import transaction as atomic_transaction
 from rest_framework import generics
+from decimal import Decimal
+
 
 from .serializers import (
     RegistrationSerializer,
@@ -29,8 +37,16 @@ from .serializers import (
     GPTRequestSerializer,
     GetPresentationSerializer,
     PaykeeperWebhookSerializer,
-    TariffSerializer, UserSerializer,
+
     ImageSerializer
+
+    TariffSerializer,
+    UserSerializer,
+    BalanceHistorySerializer,
+    PromoCodeApplySerializer,
+    PresentationSerializer,
+    SharedPresentationRequestSerializer, ResetPasswordSerializer, VerifyEmailSerializer,
+
 )
 
 from .services import (
@@ -48,7 +64,7 @@ from .services import (
     generate_slide_heading,
     generate_images,
     generate_images2,
-    generate_custom_request,
+    generate_custom_request, send_verification_email,
 )
 
 import base64
@@ -56,6 +72,8 @@ import json
 
 from django.http import JsonResponse
 from .models import User
+from .trottles import EnterPasswordReset, RequestToResetPassword
+
 
 class PaykeeperWebhookView(APIView):
     @atomic_transaction.atomic
@@ -97,7 +115,7 @@ class PaykeeperWebhookView(APIView):
     def complete_transaction(self, transaction, amount):
         """Complete the transaction, update user's balance and presentation count."""
         transaction.status = Transaction.Statuses.COMPLETED
-        transaction.user.balance = F('balance') + transaction.amount
+        transaction.user.balance.amount = F('balance') + transaction.amount
 
         tariff = Tariff.objects.filter(price=amount).first()
         if tariff:
@@ -225,7 +243,7 @@ class GPTRequestView(APIView):
 
             # Здесь обрабатываем запрос к GPT
             # В данном случае просто возвращаем его обратно в ответе
-            
+
             # gpt_response = f"Привет! Вы ввели запрос: '{gpt_request}' и отправили его на обработку GPT."
             gpt_response = generate_custom_request(gpt_request)
 
@@ -247,8 +265,8 @@ class GetUserBalanceView(APIView):
             user = User.objects.filter(id = request.user.id).first()
             if user:
                 return Response(
-                    {   
-                        "balance" : user.balance
+                    {
+                        "balance" : user.balance.amount
                     },
                     status=status.HTTP_201_CREATED
                 )
@@ -273,7 +291,7 @@ class LoginView(APIView):
 
             # Сохраняем айди пользователя в локальное хранилище
             request.session['user_id'] = user.id
-            
+
             return Response({'detail': 'Authenticated'}, status=200)
         else:
             return Response({'error': 'Invalid credentials'}, status=400)
@@ -361,9 +379,9 @@ class GenerateImagesView(APIView):
     def post(self, request):
         presentation_theme = request.data.get('presentation_theme')
         num_images = request.data.get('num_images', 1)
-        
+
         image_urls = generate_images(presentation_theme, num_images)
-        
+
         saved_images = []
         for url in image_urls:
 
@@ -372,21 +390,21 @@ class GenerateImagesView(APIView):
             if response.status_code == 200:
                 # Генерируем уникальное имя файла
                 file_name = f"{uuid.uuid4()}.jpg"
-                
+
                 # Сохраняем изображение
                 path = default_storage.save(f"generated_images/{file_name}", ContentFile(response.content))
-                
+
                 # Создаем запись в базе данных
                 image = GeneratedImage.objects.create(
                     theme=presentation_theme,
                     image=path
                 )
-                
+
                 saved_images.append({
                     'id': image.id,
                     'url': request.build_absolute_uri(image.image.url)
                 })
-        
+
         return Response({'images': saved_images}, status=status.HTTP_200_OK)
 #старые
 
@@ -395,23 +413,103 @@ class RegistrationView(APIView):
     permission_classes = (AllowAny,)
     serializer_class = RegistrationSerializer
 
+    @swagger_auto_schema(request_body=RegistrationSerializer)
+    @atomic
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
         user_data = serializer.save()
+        referrer: User = serializer.validated_data.get('referral_user')
+        promocode: PromoCode = serializer.validated_data.get('promocode')
 
         # Установите баланс пользователя
         user = User.objects.get(email=user_data['email'])
-        initial_balance = request.data.get('balance', 1000)  # По умолчанию 1000
-        user.balance = initial_balance
+        balance = Balance.objects.create(amount=Config.get_instance().bonus_to_new_users)
+        user.balance = balance
+        BalanceHistory.objects.create(
+            amount_change=Config.get_instance().bonus_to_new_users,
+            change_type=BalanceHistory.ChangeType.INCREASE,
+            change_reason=BalanceHistory.Reason.BONUS_REGISTRATION,
+            balance=balance,
+        )
+        if referrer:
+            user.referrer = referrer
+            referrer.balance.amount = F('amount') + Config.get_instance().referral_bonus
+            referrer.balance.save(update_fields=['amount'])
+            BalanceHistory.objects.create(
+                amount_change=Config.get_instance().referral_bonus,
+                change_type=BalanceHistory.ChangeType.INCREASE,
+                change_reason=BalanceHistory.Reason.REFERRAL_TOP_UP,
+                balance=referrer.balance,
+            )
         user.save()
-
         response_data = {
             'user_id': user.id,  # Возвращаем идентификатор пользователя вместе с ответом
             'access': user_data['token']['access'],
             'refresh': user_data['token']['refresh'],
         }
+        if promocode:
+            promocode_serializer = PromoCodeApplySerializer(data={'promo_code': promocode.code})
+            promocode_serializer.is_valid(raise_exception=True)
+            promocode_serializer.save(user)
+        send_verification_email(user)
         return Response(response_data, status=status.HTTP_201_CREATED)
+
+
+class VerifyEmailView(APIView):
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(request_body=VerifyEmailSerializer)
+    def post(self, request):
+        serializer = VerifyEmailSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        token = serializer.validated_data['token']
+
+        verification_token = get_object_or_404(EmailVerificationToken, token=token)
+        verification_token.user.email_verified = True
+        verification_token.user.save()
+        verification_token.delete()
+
+        return Response({"message": "Email successfully verified"}, status=status.HTTP_200_OK)
+
+
+class RequestPasswordResetView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = (RequestToResetPassword, )
+
+    def post(self, request):
+        user = request.user
+        token = get_random_string(64)
+        PasswordResetToken.objects.create(user=user, token=token)
+        reset_link = f"{settings.FRONTEND_URL}/reset-password/?token={token}&email={user.email}"
+        send_mail(
+            "Reset Your Password",
+            f"Click the link to reset your password: {reset_link}",
+            settings.DEFAULT_FROM_EMAIL,
+            [user.email]
+        )
+        return Response({"message": "Password reset email sent"}, status=status.HTTP_200_OK)
+
+
+class ResetPasswordView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = (EnterPasswordReset, )
+
+    @swagger_auto_schema(request_body=ResetPasswordSerializer)
+    def post(self, request):
+        serializer = ResetPasswordSerializer(data=request.data)
+        if serializer.is_valid():
+            token = serializer.validated_data["token"]
+            email = serializer.validated_data["email"]
+            new_password = serializer.validated_data["new_password"]
+            reset_token = get_object_or_404(PasswordResetToken, token=token, user__email=email)
+            user = reset_token.user
+            user.set_password(new_password)
+            user.save()
+            reset_token.delete()
+            return Response({"message": "Password successfully reset"}, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class ChangePasswordView(APIView):
     authentication_classes = (JWTAuthentication, )
@@ -466,19 +564,19 @@ class GenerateSlidesView(APIView):
 
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        
+
         # Получаем пользователя
         user = request.user
 
         # Проверяем, достаточно ли у пользователя средств для создания презентации
-        if user.balance < 10:
+        if user.balance.amount < 10:
             return Response(
                 {"error": "Insufficient funds"},
                 status=status.HTTP_402_PAYMENT_REQUIRED
             )
 
         # Списываем средства
-        user.balance -= 10
+        user.balance.amount -= 10
         user.save()
 
         # Создаем презентацию
@@ -507,6 +605,35 @@ class GetPresentationView(APIView):
 
     serializer_class = GetPresentationSerializer
 
+    @swagger_auto_schema(
+        operation_summary="Получение презентации",
+        operation_description="Возвращает данные о презентации по её ID, если пользователь является её владельцем.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=["id"],
+            properties={
+                "id": openapi.Schema(type=openapi.TYPE_INTEGER, description="ID презентации"),
+            },
+        ),
+        responses={
+            201: openapi.Response(
+                description="Успешный ответ",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "id": openapi.Schema(type=openapi.TYPE_INTEGER, description="ID презентации"),
+                        "author": openapi.Schema(type=openapi.TYPE_INTEGER, description="ID автора"),
+                        "json": openapi.Schema(type=openapi.TYPE_OBJECT, description="JSON-содержимое презентации"),
+                        "shared_uid": openapi.Schema(type=openapi.TYPE_STRING,
+                                                     description="Уникальный идентификатор ссылки на презентацию"),
+                        "balance": openapi.Schema(type=openapi.TYPE_NUMBER, description="Баланс пользователя"),
+                    },
+                ),
+            ),
+            400: openapi.Response(description="Презентация не найдена"),
+            403: openapi.Response(description="Доступ к чужому проекту запрещён"),
+        },
+    )
     def post(self, request):
         if request and request.data["id"]:
             presentation = Presentation.objects.filter(id=request.data["id"]).first()
@@ -524,6 +651,7 @@ class GetPresentationView(APIView):
                         "id": presentation.id,
                         "author": presentation.user.id,
                         "json": json.loads(presentation.json),
+                        "shared_uid": str(presentation.share_link_uid),
                         "balance" : presentation.user.balance
                     },
                     status=status.HTTP_201_CREATED
@@ -532,6 +660,20 @@ class GetPresentationView(APIView):
             data="Presentation not found!",
             status=400
         )
+
+
+class GetPresentationSharedView(APIView):
+    authentication_classes = (JWTAuthentication, )
+    permission_classes = (AllowAny,)
+    queryset = Presentation.objects.select_related('user')
+    serializer_class = PresentationSerializer
+
+    @swagger_auto_schema(request_body=SharedPresentationRequestSerializer)
+    def post(self, request):
+        serializer = SharedPresentationRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(self.serializer_class(serializer.validated_data['presentation']).data)
+
 
 class SavePresentationView(APIView):
     authentication_classes = (JWTAuthentication, )
@@ -662,6 +804,7 @@ class CreateNewEmptyProject(APIView):
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
+
 class UploadImage(APIView):
     authentication_classes = (JWTAuthentication,)
     permission_classes = (IsAuthenticated,)
@@ -689,3 +832,56 @@ class UploadImage(APIView):
             print('Ошибки сериализатора:')
             print(serializer.errors)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class UpdateBalanceAPIView(APIView):
+    permission_classes = (IsAuthenticated, )
+
+    def post(self, request):
+        # request.user = User.objects.get(email='dddcfffd@gmail.com') # убери потом
+        serializer = BalanceHistorySerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            data = serializer.validated_data
+
+            balance = request.user.balance
+
+            # balance = User.objects.get(email='dddcfffd@gmail.com').balance # убери потом
+
+            # Изменяем баланс в зависимости от типа изменения
+            if data['change_type'] == BalanceHistory.ChangeType.INCREASE:
+                balance.amount += Decimal(data['amount_change'])
+            elif data['change_type'] == BalanceHistory.ChangeType.DECREASE:
+                balance.amount -= Decimal(data['amount_change'])
+
+            # Сохраняем изменения баланса
+            balance.save()
+
+            # Создаем запись в истории изменений баланса
+            BalanceHistory.objects.create(
+                amount_change=data['amount_change'],
+                change_type=data['change_type'],
+                change_reason=data['change_reason'],
+                balance=balance,
+            )
+
+            return Response({"detail": "Balance updated successfully."}, status=status.HTTP_200_OK)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PromoCodeApplyAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(request_body=PromoCodeApplySerializer)
+    @atomic
+    def post(self, request):
+        serializer = PromoCodeApplySerializer(data=request.data)
+
+        if serializer.is_valid():
+            promo_code = serializer.save(user=request.user)
+            return Response(
+                {"detail": f"Промокод '{promo_code.code}' успешно применён."},
+                status=status.HTTP_200_OK
+            )
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
