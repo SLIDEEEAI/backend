@@ -38,7 +38,7 @@ from .serializers import (
     GetPresentationSerializer,
     PaykeeperWebhookSerializer,
 
-    ImageSerializer
+    ImageSerializer,
 
     TariffSerializer,
     UserSerializer,

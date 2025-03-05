@@ -94,7 +94,7 @@ urlpatterns = [
     path('presentation/new', CreateNewEmptyProject.as_view()),
 
 
-    path('file/upload', UploadImage.as_view(), name='upload_image')
+    path('file/upload', UploadImage.as_view(), name='upload_image'),
 
     path('users/update_balance', UpdateBalanceAPIView.as_view()),
     path('users/promocode', PromoCodeApplyAPIView.as_view()),
