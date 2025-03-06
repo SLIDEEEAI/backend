@@ -234,25 +234,27 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'email', 'role', 'is_active', 'is_staff', 'balance', 'presentation', 'created_at', 'updated_at']
 
 
-class ImageSerializer(serializers.Serializer):
-    image = serializers.ImageField()
+# class ImageSerializer(serializers.Serializer):
+#     image = serializers.ImageField()
 
-"""
+
 class ImageSerializer(serializers.Serializer):
+    print('ImageSerializer ededededwedewed')
     image : serializers.ImageField()
 
-    def validate_image(self, value: serializers.ImageField) -> serializers.ImageField:
+    def validate_image(self, value):
+        print('validate_image ededededwedewed')
         max_size = 3 * 1024 * 1024  # 3 мегабайта в байтах
         if value.size > max_size:
-            raise ValidationError("Размер изображения не должен превышать 3 мегабайта.")
+            raise serializers.ValidationError("Размер изображения не должен превышать 3 мегабайта.")
 
         valid_extensions = ['.jpg', '.jpeg', '.png']
         ext = os.path.splitext(value.name)[1].lower()
         if ext not in valid_extensions:
-            raise ValidationError("Допустимы только изображения форматов: jpg, jpeg, png.")
+            raise serializers.ValidationError("Допустимы только изображения форматов: jpg, jpeg, png.")
 
         return value
-"""
+
 
 class BalanceHistorySerializer(serializers.ModelSerializer):
     class Meta:

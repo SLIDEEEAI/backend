@@ -25,7 +25,7 @@ from presentation.models import Presentation, Transaction, Tariff, BalanceHistor
 from source.settings import PAYKEEPER_USER, PAYKEEPER_PASSWORD, SERVER_PAYKEEPER
 from django.shortcuts import get_object_or_404
 from django.db import transaction as atomic_transaction
-from rest_framework import generics
+from rest_framework import generics, serializers
 from decimal import Decimal
 
 
@@ -652,7 +652,8 @@ class GetPresentationView(APIView):
                         "author": presentation.user.id,
                         "json": json.loads(presentation.json),
                         "shared_uid": str(presentation.share_link_uid),
-                        "balance" : presentation.user.balance
+                        # -- uncomment
+                        # "balance" : presentation.user.balance
                     },
                     status=status.HTTP_201_CREATED
                 )
@@ -811,27 +812,51 @@ class UploadImage(APIView):
 
     def post(self, request):
         serializer = ImageSerializer(data=request.data)
-        if serializer.is_valid():
-            image = serializer.validated_data['image']
+
+        image = request.data.get('image')
+
+        if not image:
+            return Response({'error':'Поле image обязательно.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        else:
+            try:
+                validated_image = serializer.validate_image(image)
+            except serializers.ValidationError as e:
+                return Response({'error': e.detail}, status=status.HTTP_400_BAD_REQUEST)
+
             user_id = request.user.id  # **Получаем ID текущего пользователя**
             user_folder = os.path.join(settings.MEDIA_ROOT, 'uploads', str(user_id))
 
-            # **Создание папки, если она не существует**
+            # Создание папки, если она не существует
             os.makedirs(user_folder, exist_ok=True)
 
-            # **Сохранение файла**
-            file_path = os.path.join(user_folder, image.name)
+            # Генерация уникального имени
+            unique_filename = str(uuid.uuid4()) + '.' + validated_image.name.split(".")[-1]
+            # Сохранение файла
+            file_path = os.path.join(user_folder, unique_filename)
+
+            # Проверка на существование файла с таким же содержимым. Если да - вернуть путь
+            for existing_file in os.listdir(user_folder):
+                existing_file_path = os.path.join(user_folder, existing_file)
+                if self.files_are_identical(validated_image, existing_file_path):
+                    url = os.path.join(settings.MEDIA_URL, 'uploads', str(user_id), existing_file)
+                    return Response({'file_path': url}, status=status.HTTP_200_OK)
+
             with open(file_path, 'wb+') as destination:
                 for chunk in image.chunks():
                     destination.write(chunk)
 
-            # **Возвращаем путь к сохранённому файлу**
-            url = os.path.join(settings.MEDIA_URL, 'uploads', str(user_id), image.name)
+            # Возвращаем путь к сохранённому файлу
+            url = os.path.join(settings.MEDIA_URL, 'uploads', str(user_id), unique_filename)
             return Response({'file_path': url}, status=status.HTTP_201_CREATED)
-        else:
-            print('Ошибки сериализатора:')
-            print(serializer.errors)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def files_are_identical(self, new_file, existing_file_path):
+        """Сравнивает содержимое двух файлов."""
+        with open(existing_file_path, 'rb') as f:
+            existing_file_content = f.read()
+            new_file_content = new_file.read()
+            new_file.seek(0) # Сбросить указатель после чтения
+            return existing_file_content == new_file_content
 
 
 class UpdateBalanceAPIView(APIView):
