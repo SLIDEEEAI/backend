@@ -32,6 +32,7 @@ from .views import (
     CreateNewEmptyProject,
 
     UploadImage,
+    ListUserImages,
 
     GetPresentationSharedView,
     UpdateBalanceAPIView,
@@ -95,6 +96,7 @@ urlpatterns = [
 
 
     path('file/upload', UploadImage.as_view(), name='upload_image'),
+    path('file/images_list', ListUserImages.as_view(), name='images_list'),
 
     path('users/update_balance', UpdateBalanceAPIView.as_view()),
     path('users/promocode', PromoCodeApplyAPIView.as_view()),

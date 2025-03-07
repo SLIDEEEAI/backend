@@ -858,6 +858,28 @@ class UploadImage(APIView):
             new_file.seek(0) # Сбросить указатель после чтения
             return existing_file_content == new_file_content
 
+class ListUserImages(APIView):
+    authentication_classes = (JWTAuthentication,)
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        user_id = request.user.id
+        user_folder = os.path.join(settings.MEDIA_ROOT, 'uploads', str(user_id))
+
+        # Создание папки пользователя, если она не существует
+        if not os.path.exists(user_folder):
+            os.makedirs(user_folder)
+
+        # Получение списка файлов в папке
+        image_urls = []
+        valid_extensions = ['jpg', 'jpeg', 'png']
+
+        for filename in os.listdir(user_folder):
+            if any(filename.lower().endswith(ext) for ext in valid_extensions):
+                file_url = os.path.join(settings.MEDIA_URL, 'uploads', str(user_id), filename)
+                image_urls.append(file_url)
+
+        return Response({'images': image_urls}, status=status.HTTP_200_OK)
 
 class UpdateBalanceAPIView(APIView):
     permission_classes = (IsAuthenticated, )
