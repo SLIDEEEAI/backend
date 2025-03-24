@@ -881,6 +881,24 @@ class ListUserImages(APIView):
 
         return Response({'images': image_urls}, status=status.HTTP_200_OK)
 
+class ListBackgroundImages(APIView):
+    authentication_classes = (JWTAuthentication,)
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        folder = os.path.join(settings.MEDIA_ROOT, 'background_images')
+
+        # Получение списка файлов в папке
+        image_urls = []
+        valid_extensions = ['jpg', 'jpeg', 'png']
+
+        for filename in os.listdir(folder):
+            if any(filename.lower().endswith(ext) for ext in valid_extensions):
+                file_url = os.path.join(settings.MEDIA_URL, 'background_images', filename)
+                image_urls.append(file_url)
+
+        return Response({'images': image_urls}, status=status.HTTP_200_OK)
+
 class UpdateBalanceAPIView(APIView):
     permission_classes = (IsAuthenticated, )
 
