@@ -33,6 +33,7 @@ from .views import (
 
     UploadImage,
     ListUserImages,
+    ListBackgroundImages,
 
     GetPresentationSharedView,
     UpdateBalanceAPIView,
@@ -96,7 +97,8 @@ urlpatterns = [
 
 
     path('file/upload', UploadImage.as_view(), name='upload_image'),
-    path('file/images_list', ListUserImages.as_view(), name='images_list'),
+    path('file/images_list', ListUserImages.as_view(), name='user_images'),
+    path('file/background_images_list', ListBackgroundImages.as_view(), name='background_images'),
 
     path('users/update_balance', UpdateBalanceAPIView.as_view()),
     path('users/promocode', PromoCodeApplyAPIView.as_view()),
