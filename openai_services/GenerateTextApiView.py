@@ -12,10 +12,10 @@ class TextGenerationAPIView(APIView):
         #     return Response({'error': 'Test api is working'}, status=status.HTTP_200_OK)
 
         # Получаем параметры из тела запроса
-        model = request.data.get('model', "gpt-3.5-turbo")
+        model = request.data.get('model', "gpt-4-turbo")
 
         user_prompt = request.data.get('user_prompt')
-        system_prompt = request.data.get('system_prompt')
+        system_prompt = request.data.get('system_prompt', '')
 
         max_tokens = request.data.get('max_tokens')
         other_params = {k: v for k, v in request.data.items() if k not in ['model', 'user_prompt', 'system_prompt', 'max_tokens']}
@@ -39,7 +39,7 @@ class TextGenerationAPIView(APIView):
                 **other_params
             )
             # Возвращаем ответ API
-            return Response(response, status=status.HTTP_200_OK)
+            return Response(response.choices[0].message.content, status=status.HTTP_200_OK)
         except Exception as e:
             # Обработка ошибок
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
