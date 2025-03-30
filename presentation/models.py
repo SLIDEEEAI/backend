@@ -68,6 +68,7 @@ class Balance(BaseModel):
 
 class User(AbstractBaseUser, PermissionsMixin):
     username = models.CharField(max_length=255)
+    user_thumb = models.CharField(max_length=255, blank=True, null=True)
     email = models.EmailField(db_index=True, unique=True)
     email_verified = models.BooleanField(default=False)
     role = models.ForeignKey(Roles, on_delete=models.SET_NULL, null=True)
