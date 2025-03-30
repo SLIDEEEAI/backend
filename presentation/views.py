@@ -741,6 +741,18 @@ class GetAllPresentationView(APIView):
                 status=400
             )
 
+class UpdateUserInfo(APIView):
+    authentication_classes = (JWTAuthentication, )
+    permission_classes = (IsAuthenticated, )
+
+    def patch(self, request):
+        user = request.user
+        serializer = UserSerializer(user, data=request.data, partial=True)  # partial=True для частичного обновления
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 class GetUserReferralsView(APIView):
     authentication_classes = (JWTAuthentication, )
     permission_classes = (IsAuthenticated, )
