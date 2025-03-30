@@ -239,11 +239,9 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class ImageSerializer(serializers.Serializer):
-    print('ImageSerializer ededededwedewed')
     image : serializers.ImageField()
 
     def validate_image(self, value):
-        print('validate_image ededededwedewed')
         max_size = 3 * 1024 * 1024  # 3 мегабайта в байтах
         if value.size > max_size:
             raise serializers.ValidationError("Размер изображения не должен превышать 3 мегабайта.")
