@@ -231,7 +231,7 @@ class TariffSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'role', 'is_active', 'is_staff', 'balance', 'presentation', 'created_at', 'updated_at']
+        fields = ['id', 'username', 'email', 'role', 'is_active', 'is_staff', 'balance', 'presentation', 'created_at', 'updated_at', 'user_thumb']
 
 
 # class ImageSerializer(serializers.Serializer):
@@ -239,11 +239,10 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class ImageSerializer(serializers.Serializer):
-    print('ImageSerializer ededededwedewed')
     image : serializers.ImageField()
+    is_avatar : serializers.BooleanField()
 
     def validate_image(self, value):
-        print('validate_image ededededwedewed')
         max_size = 3 * 1024 * 1024  # 3 мегабайта в байтах
         if value.size > max_size:
             raise serializers.ValidationError("Размер изображения не должен превышать 3 мегабайта.")
