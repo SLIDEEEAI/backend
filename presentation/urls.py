@@ -39,6 +39,7 @@ from .views import (
     UpdateBalanceAPIView,
     PromoCodeApplyAPIView,
 
+    GetUserReferralsView
 )
 
 from rest_framework_simplejwt.views import (
@@ -102,5 +103,7 @@ urlpatterns = [
 
     path('users/update_balance', UpdateBalanceAPIView.as_view()),
     path('users/promocode', PromoCodeApplyAPIView.as_view()),
+
+    path('user/referrals', GetUserReferralsView.as_view()),
 
 ]

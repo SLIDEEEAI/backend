@@ -741,6 +741,31 @@ class GetAllPresentationView(APIView):
                 status=400
             )
 
+class GetUserReferralsView(APIView):
+    authentication_classes = (JWTAuthentication, )
+    permission_classes = (IsAuthenticated, )
+
+    def get(self, request):
+        try:
+            referrers = User.objects.filter(referrer=request.user).all()
+            referrers_list = []
+
+            if referrers:
+                for user in referrers:
+                    referrers_list.append({
+                        "email" : user.email,
+                        "date" : user.created_at,
+                        "tokens" : 1000
+                    })
+
+            return Response(referrers_list,
+                            status=status.HTTP_200_OK
+                            )
+        except Exception as exc:
+            return Response(
+                data=exc,
+                status=status.HTTP_204_NO_CONTENT
+            )
 
 class ExportPresentationView(APIView):
     # authentication_classes = (JWTAuthentication, )
