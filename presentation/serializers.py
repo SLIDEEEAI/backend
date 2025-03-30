@@ -240,6 +240,7 @@ class UserSerializer(serializers.ModelSerializer):
 
 class ImageSerializer(serializers.Serializer):
     image : serializers.ImageField()
+    is_avatar : serializers.BooleanField()
 
     def validate_image(self, value):
         max_size = 3 * 1024 * 1024  # 3 мегабайта в байтах

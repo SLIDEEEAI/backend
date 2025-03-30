@@ -851,6 +851,8 @@ class UploadImage(APIView):
         serializer = ImageSerializer(data=request.data)
 
         image = request.data.get('image')
+        folder_name = request.data.get('type', 'uploaded')
+        is_avatar = folder_name == 'avatar'
 
         if not image:
             return Response({'error':'Поле image обязательно.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -862,7 +864,7 @@ class UploadImage(APIView):
                 return Response({'error': e.detail}, status=status.HTTP_400_BAD_REQUEST)
 
             user_id = request.user.id  # **Получаем ID текущего пользователя**
-            user_folder = os.path.join(settings.MEDIA_ROOT, 'uploads', str(user_id))
+            user_folder = os.path.join(settings.MEDIA_ROOT, folder_name, str(user_id))
 
             # Создание папки, если она не существует
             os.makedirs(user_folder, exist_ok=True)
@@ -876,7 +878,9 @@ class UploadImage(APIView):
             for existing_file in os.listdir(user_folder):
                 existing_file_path = os.path.join(user_folder, existing_file)
                 if self.files_are_identical(validated_image, existing_file_path):
-                    url = os.path.join(settings.MEDIA_URL, 'uploads', str(user_id), existing_file)
+                    url = os.path.join(settings.MEDIA_URL, folder_name, str(user_id), existing_file)
+                    if is_avatar:
+                        self.update_thumb(url)
                     return Response({'file_path': url}, status=status.HTTP_200_OK)
 
             with open(file_path, 'wb+') as destination:
@@ -884,8 +888,16 @@ class UploadImage(APIView):
                     destination.write(chunk)
 
             # Возвращаем путь к сохранённому файлу
-            url = os.path.join(settings.MEDIA_URL, 'uploads', str(user_id), unique_filename)
+            url = os.path.join(settings.MEDIA_URL, folder_name, str(user_id), unique_filename)
+
+            if is_avatar:
+                self.update_thumb(url)
             return Response({'file_path': url}, status=status.HTTP_201_CREATED)
+
+    def update_thumb(self, url):
+        user = self.request.user
+        user.user_thumb = url
+        user.save()
 
     def files_are_identical(self, new_file, existing_file_path):
         """Сравнивает содержимое двух файлов."""
@@ -894,6 +906,17 @@ class UploadImage(APIView):
             new_file_content = new_file.read()
             new_file.seek(0) # Сбросить указатель после чтения
             return existing_file_content == new_file_content
+
+class ResetUserAvatar(APIView):
+    authentication_classes = (JWTAuthentication,)
+    permission_classes = (IsAuthenticated,)
+
+    def delete(self, request):
+        user = self.request.user
+        user.user_thumb = None
+        user.save()
+        return Response(None, status=status.HTTP_200_OK)
+
 
 class ListUserImages(APIView):
     authentication_classes = (JWTAuthentication,)
