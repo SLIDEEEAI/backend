@@ -7,8 +7,8 @@ class Config(models.Model):
 
     telegram_group_joined_promocode_token_amount = models.IntegerField(default=100_000)
     telegram_admins_id = models.JSONField(default=[])
-    telegram_group_id = models.CharField(default='')
-    telegram_bot_apikey = models.CharField(default='')
+    telegram_group_id = models.CharField(default='', max_length=255)
+    telegram_bot_apikey = models.CharField(default='', max_length=255)
 
 
     class Meta:
