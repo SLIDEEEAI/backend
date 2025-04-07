@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     'presentation',
     'corsheaders',
     'main.apps.MainConfig',
+    'telegram_bot.apps.TelegramBotConfig',
 ]
 
 MIDDLEWARE = [

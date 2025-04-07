@@ -13,6 +13,7 @@ gunicorn = "*"
 requests = "*"
 django-cors-headers = "*"
 drf-yasg = "*"
+pytelegrambotapi = "==4.16.1"
 
 [dev-packages]
 
