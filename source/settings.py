@@ -190,11 +190,11 @@ SERVER_PAYKEEPER = "https://slideee.server.paykeeper.ru"
 
 # SMTP настройки в settings.py
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_HOST = 'sm20.hosting.reg.ru'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'EMAIL'
-EMAIL_HOST_PASSWORD = 'PASSWORD'
+EMAIL_HOST_USER = 'registration@slideee.ru'
+EMAIL_HOST_PASSWORD = 'registration@SLIDEmail'
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 FRONTEND_URL = "https://slideee.ru"
 
