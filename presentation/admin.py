@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import Roles, User, Presentation, Transaction, Tariff, BalanceHistory, Balance, PromoCode, PromoCodeUsage
+from .models import Roles, User, Presentation, Transaction, Tariff, BalanceHistory, Balance, PromoCode, PromoCodeUsage, \
+    Scope
 
 admin.site.register([
     Roles, User
@@ -20,10 +21,16 @@ class TransactionAdmin(admin.ModelAdmin):
     list_filter = ('status', 'created_at', 'user')
 
 
+@admin.register(Scope)
+class ScopeAdmin(admin.ModelAdmin):
+    list_display = ['title', 'token_price']
+
+
 @admin.register(Tariff)
 class TariffAdmin(admin.ModelAdmin):
     list_display = ['name', 'price', 'presentation_count']
     search_fields = ['name', 'price', 'presentation_count']
+    filter_horizontal = ['scopes']
 
 
 @admin.register(Balance)

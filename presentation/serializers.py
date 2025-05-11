@@ -10,7 +10,7 @@ from django.forms.models import model_to_dict
 
 from collections import OrderedDict
 
-from .models import Roles, Presentation, Tariff, BalanceHistory, PromoCode, PromoCodeUsage
+from .models import Roles, Presentation, Tariff, BalanceHistory, PromoCode, PromoCodeUsage, Scope
 from rest_framework.serializers import ValidationError
 
 from .services import generate_slides_theme, generate_slides_text
@@ -222,10 +222,18 @@ class UserPresentationSerializer(serializers.ModelSerializer):
         fields = ['presentation']
 
 
+class ScopeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Scope
+        fields = ['id', 'title', 'token_price']
+
+
+
 class TariffSerializer(serializers.ModelSerializer):
+    scopes = ScopeSerializer(many=True)
     class Meta:
         model = Tariff
-        fields = ['id', 'name', 'price', 'presentation_count']
+        fields = ['id', 'name', 'price', 'presentation_count', 'scopes']
 
 
 class UserSerializer(serializers.ModelSerializer):

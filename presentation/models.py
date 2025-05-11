@@ -199,6 +199,14 @@ class Transaction(BaseModel):
     payment_url = models.URLField(max_length=1000)
 
 
+class Scope(BaseModel):
+    title = models.CharField(max_length=255)
+    token_price = models.PositiveIntegerField(default=0)
+
+    def __str__(self):
+        return f'{self.title}: {self.token_price}'
+
+
 class Tariff(BaseModel):
     """
     Модель для хранения информации о тарифах.
@@ -215,6 +223,7 @@ class Tariff(BaseModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100)
     price = models.DecimalField(max_digits=10, decimal_places=2)
+    scopes = models.ManyToManyField(Scope)
     presentation_count = models.IntegerField()
 
     def __str__(self) -> str:
