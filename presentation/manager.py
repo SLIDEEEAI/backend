@@ -20,14 +20,13 @@ class UserManager(BaseUserManager):
         return user
 
     def create_user(self, username, email, password, role):
-        if role is None:
-            raise TypeError('Users must have a role.')
 
         user = self.create_user_object(
             username=username, email=email, password=password
         )
 
-        user.role = role
+        user.save()
+        user.role.set(role)
         user.save()
 
         return user
