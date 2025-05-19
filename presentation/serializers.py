@@ -44,7 +44,7 @@ class RegistrationSerializer(serializers.ModelSerializer):
         min_length=8,
         write_only=True
     )
-    role = serializers.IntegerField(write_only=True)
+    role = serializers.ListField(child=serializers.IntegerField(write_only=True))
     token = serializers.DictField(read_only=True)
     promocode = serializers.SlugRelatedField(
         slug_field='code',
@@ -64,22 +64,18 @@ class RegistrationSerializer(serializers.ModelSerializer):
         fields = ['email', 'username', 'role', 'password', 'token', 'referral_user', 'promocode']
 
     def validate(self, attrs: OrderedDict):
-        if attrs["role"] not in [x.id for x in Roles.objects.all()]:
+        db_roles = set(Roles.objects.values_list("id", flat=True))
+        incoming_roles = set(attrs["role"])
+
+        if not incoming_roles.issubset(db_roles):
             raise serializers.ValidationError(
-                "Available roles for registration - {}".format(
-                    ', '.join([str(x.id) for x in Roles.objects.all()])
-                )
+                "Available roles for registration - {}".format(", ".join(map(str, db_roles)))
             )
         return attrs
 
     def create(self, validated_data):
-        if validated_data.get("referral_user"):
-            validated_data.pop("referral_user")
-        if validated_data.get("promocode"):
-            validated_data.pop("promocode")
-        role = validated_data.pop("role")
-        role = Roles.objects.get(id=role)
-        validated_data.update({"role": role})
+        validated_data.pop("referral_user", None)
+        validated_data.pop("promocode", None)
 
         user = User.objects.create_user(**validated_data)
         user_dict = model_to_dict(user)
@@ -228,6 +224,12 @@ class ScopeSerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'token_price']
 
 
+class RoleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Roles
+        fields = ['id', 'name']
+
+
 
 class TariffSerializer(serializers.ModelSerializer):
     scopes = ScopeSerializer(many=True)
@@ -237,6 +239,7 @@ class TariffSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    role = RoleSerializer(many=True)
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'role', 'is_active', 'is_staff', 'balance', 'presentation', 'created_at', 'updated_at', 'user_thumb']

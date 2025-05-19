@@ -71,7 +71,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     user_thumb = models.CharField(max_length=255, blank=True, null=True)
     email = models.EmailField(db_index=True, unique=True)
     email_verified = models.BooleanField(default=False)
-    role = models.ForeignKey(Roles, on_delete=models.SET_NULL, null=True)
+    role = models.ManyToManyField(Roles, default=[])
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)

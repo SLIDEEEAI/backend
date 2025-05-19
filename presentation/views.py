@@ -21,7 +21,7 @@ from rest_framework_simplejwt.tokens import AccessToken
 
 from main.models import Config
 from presentation.models import Presentation, Transaction, Tariff, BalanceHistory, Balance, PromoCode, \
-    EmailVerificationToken, PasswordResetToken
+    EmailVerificationToken, PasswordResetToken, Roles
 from source.settings import PAYKEEPER_USER, PAYKEEPER_PASSWORD, SERVER_PAYKEEPER
 from django.shortcuts import get_object_or_404
 from django.db import transaction as atomic_transaction
@@ -45,7 +45,7 @@ from .serializers import (
     BalanceHistorySerializer,
     PromoCodeApplySerializer,
     PresentationSerializer,
-    SharedPresentationRequestSerializer, ResetPasswordSerializer, VerifyEmailSerializer,
+    SharedPresentationRequestSerializer, ResetPasswordSerializer, VerifyEmailSerializer, RoleSerializer,
 
 )
 
@@ -1010,3 +1010,13 @@ class PromoCodeApplyAPIView(APIView):
             )
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+class RoleAPIView(APIView):
+    permission_classes = [AllowAny]
+    serializer_class = RoleSerializer
+
+    def get(self, request):
+        roles = self.serializer_class(Roles.objects.all().values("id", "name"), many=True).data
+        return Response(roles)
