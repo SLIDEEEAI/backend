@@ -10,12 +10,16 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
-from pathlib import Path
 from datetime import timedelta
-
 import httpx
 from openai import OpenAI
-import presentation
+from pathlib import Path
+from decouple import AutoConfig
+
+BASE_DIR = Path(__file__).parent.parent.parent.parent
+
+config = AutoConfig()
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -104,9 +108,20 @@ WSGI_APPLICATION = 'source.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': config('POSTGRES_DB'),
+        'USER': config('POSTGRES_USER'),
+        'PASSWORD': config('POSTGRES_PASSWORD'),
+        'HOST': config('DJANGO_DATABASE_HOST'),
+        'PORT': config('DJANGO_DATABASE_PORT', cast=int),
+        'CONN_MAX_AGE': config('CONN_MAX_AGE', cast=int, default=60),
+        'OPTIONS': {
+            # 'pool': True,
+            'connect_timeout': 10,
+            'options': '-c statement_timeout=15000ms',
+            # consider using 'isolation_level' set to 'serializable'
+        },
+    },
 }
 
 

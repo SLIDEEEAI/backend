@@ -6,7 +6,7 @@ class Config(models.Model):
     bonus_to_new_users = models.DecimalField(max_digits=10, decimal_places=2, default=1000)
 
     telegram_group_joined_promocode_token_amount = models.IntegerField(default=100_000)
-    telegram_admins_id = models.JSONField(default=[])
+    telegram_admins_id = models.JSONField(default=dict)
     telegram_group_id = models.CharField(default='', max_length=255)
     telegram_bot_apikey = models.CharField(default='', max_length=255)
 
