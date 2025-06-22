@@ -924,7 +924,7 @@ class ListUserImages(APIView):
 
     def get(self, request):
         user_id = request.user.id
-        user_folder = os.path.join(settings.MEDIA_ROOT, 'uploads', str(user_id))
+        user_folder = os.path.join(settings.MEDIA_ROOT, 'uploaded', str(user_id))
 
         # Создание папки пользователя, если она не существует
         if not os.path.exists(user_folder):
@@ -936,7 +936,7 @@ class ListUserImages(APIView):
 
         for filename in os.listdir(user_folder):
             if any(filename.lower().endswith(ext) for ext in valid_extensions):
-                file_url = os.path.join(settings.MEDIA_URL, 'uploads', str(user_id), filename)
+                file_url = os.path.join(settings.MEDIA_URL, 'uploaded', str(user_id), filename)
                 image_urls.append(file_url)
 
         return Response({'images': image_urls}, status=status.HTTP_200_OK)
