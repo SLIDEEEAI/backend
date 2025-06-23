@@ -14,8 +14,8 @@ requests = "*"
 django-cors-headers = "*"
 drf-yasg = "*"
 python-decouple = ">=3.8"
-psycopg[binary,pool] = ">=3.2"
 pytelegrambotapi = "==4.16.1"
+psycopg = {extras = ["pool", "binary"], version = ">=3.2"}
 
 [dev-packages]
 
