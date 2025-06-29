@@ -843,6 +843,40 @@ class CreateNewEmptyProject(APIView):
             return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 
+class RemoveImage(APIView):
+    authentication_classes = (JWTAuthentication,)
+    permission_classes = (IsAuthenticated,)
+
+    def delete(self, request):
+        filename = request.data.get('filename')
+
+        if not filename:
+            return Response({"error": "Filename is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Нормализуем путь (заменяем обратные слеши и удаляем начальный /media/ если есть)
+        filename = filename.replace('\\', '/').lstrip('/')
+        if filename.startswith('media/'):
+            filename = filename[6:]  # Удаляем 'media/' из начала пути
+
+        # Полный путь к файлу
+        file_path = os.path.join(settings.MEDIA_ROOT, filename)
+
+        # Проверяем, существует ли файл
+        if not os.path.exists(file_path):
+            return Response({"error": "File not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Проверяем, что путь находится внутри MEDIA_ROOT (безопасность)
+        file_path = os.path.normpath(file_path)
+        media_root = os.path.normpath(settings.MEDIA_ROOT)
+        if not file_path.startswith(media_root):
+            return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            os.remove(file_path)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except OSError as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 class UploadImage(APIView):
     authentication_classes = (JWTAuthentication,)
     permission_classes = (IsAuthenticated,)
