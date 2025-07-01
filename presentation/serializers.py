@@ -240,6 +240,8 @@ class TariffSerializer(serializers.ModelSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
     role = RoleSerializer(many=True)
+    balance = serializers.FloatField(source='balance.amount', required=False)
+
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'role', 'is_active', 'is_staff', 'balance', 'presentation', 'created_at', 'updated_at', 'user_thumb']
