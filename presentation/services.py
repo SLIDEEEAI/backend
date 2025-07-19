@@ -39,7 +39,7 @@ def chat_competions_create(system_content: str) -> str | None:
                 "content": system_content,
             }
         ],
-        model="gpt-3.5-turbo",
+        model="deepseek-chat",
     )
 
     if chat_completion.choices:
@@ -142,7 +142,7 @@ def generate_custom_request(prompt: str, max_tokens: int = 500) -> str:
         {"role": "user", "content": prompt}
     ]
     response = settings.OPENAI_CLIENT.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model="deepseek-chat",
         messages=messages,
         max_tokens=max_tokens,
     )
@@ -156,7 +156,7 @@ def generate_short_text(presentation_theme: str, max_tokens: int = 50) -> str:
         {"role": "user", "content": f"Напишите короткое введение или краткое описание для темы презентации: {presentation_theme}. Ограничьте свой ответ {max_tokens} токенами."}
     ]
     response = settings.OPENAI_CLIENT.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model="deepseek-chat",
         messages=messages,
         max_tokens=max_tokens,
     )
@@ -181,7 +181,7 @@ def generate_long_text(presentation_theme: str, max_tokens: int = 50) -> str:
         {"role": "user", "content": f"Напишите про {presentation_theme}. Пиши только текст, не надо дополнительных вводных. Мне надо это будет скопировать на слайд. Не пиши название самой темы. Ваш ответ не должен превышать {max_tokens} токенов."}
     ]
     response = settings.OPENAI_CLIENT.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model="deepseek-chat",
         messages=messages,
         max_tokens=max_tokens,
     )
@@ -196,7 +196,7 @@ def generate_bullet_points(presentation_theme: str, max_items: int = 5) -> list[
         {"role": "user", "content": f"Напишите функции и виды по {max_items} пунктов, связанных с темой презентации: {presentation_theme}."}
     ]
     response = settings.OPENAI_CLIENT.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model="deepseek-chat",
         messages=messages,
         max_tokens=100,  # Предположим, что каждый пункт составляет около 20 токенов
     )
@@ -230,7 +230,7 @@ def generate_quote(presentation_theme: str) -> str:
         {"role": "user", "content": f"Напишите цитату или высказывание, связанные с темой презентации: {presentation_theme}."}
     ]
     response = settings.OPENAI_CLIENT.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model="deepseek-chat",
         messages=messages,
         max_tokens=50,  # цитата короткая - 100 слов
     )
@@ -245,7 +245,7 @@ def generate_chart_data(presentation_theme: str) -> str:
         {"role": "user", "content": f"Сгенерируйте данные для создания графиков или диаграмм, связанных с темой презентации: {presentation_theme}."}
     ]
     response = settings.OPENAI_CLIENT.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model="deepseek-chat",
         messages=messages,
         max_tokens=100,  # Предположим, что короткий ответ на данные для графика
     )
@@ -258,7 +258,7 @@ def generate_questions(presentation_theme: str, max_questions: int = 3) -> list[
         {"role": "user", "content": f"Сгенерируйте {max_questions} вопроса, связанных с темой презентации: {presentation_theme}."}
     ]
     response = settings.OPENAI_CLIENT.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model="deepseek-chat",
         messages=messages,
         max_tokens=150,  # Предположим, что каждый вопрос около 50 токенов
     )
@@ -272,7 +272,7 @@ def generate_slide_title(presentation_theme: str) -> str:
         {"role": "user", "content": f"Сгенерируйте заголовок слайда, который четко описывает содержание, связанное с темой презентации: {presentation_theme}."}
     ]
     response = settings.OPENAI_CLIENT.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model="deepseek-chat",
         messages=messages,
         max_tokens=20,  # Предположим, что заголовок короткий
     )
@@ -285,7 +285,7 @@ def generate_slide_heading(presentation_theme: str) -> str:
         {"role": "user", "content": f"Сгенерируйте заголовок раздела презентации, который поможет структурировать ее содержание, связанное с темой: {presentation_theme}."}
     ]
     response = settings.OPENAI_CLIENT.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model="deepseek-chat",
         messages=messages,
         max_tokens=30,  # Предположим, что заголовок немного длиннее
     )
