@@ -195,7 +195,8 @@ SIMPLE_JWT = {
 
 OPENAI_CLIENT = OpenAI(
     api_key="",
-    http_client=httpx.Client(proxy='http://109.248.32.81:3128')
+    base_url="https://api.deepseek.com",
+    # http_client=httpx.Client(proxy='http://109.248.32.81:3128')
 )
 
 PAYKEEPER_USER = "admin"
