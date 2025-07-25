@@ -547,20 +547,41 @@ def export_presentation(presentation, presentation_type) -> str:
     return url_path
 
 
+def get_email_template():
+    if settings.EMAIL_TEMPLATE_CACHE is None:
+        with open('templates/email/verification_email.html', 'r', encoding='utf-8') as f:
+            settings.EMAIL_TEMPLATE_CACHE = f.read()
+    return settings.EMAIL_TEMPLATE_CACHE
+
+
 def send_verification_email(user):
+    # Генерация токена
     token, created = EmailVerificationToken.objects.get_or_create(
         user=user, defaults={'token': get_random_string(64)}
     )
+
+    # Формирование ссылки
     verification_link = f"{settings.FRONTEND_URL}/verify-email/?token={token.token}"
-    subject = "Confirm Your Email"
-    message = f"Click the link to confirm your email: {verification_link}"
-    html_message = f"""
-        <html>
-            <body>
-                <p>Click the link below to confirm your email:</p>
-                <a href="{verification_link}">Confirm Email</a>
-            </body>
-        </html>
+
+    # Загрузка шаблона
+    html_message = get_email_template().replace('{{ verification_link }}', verification_link)
+
+    # Текстовый вариант (для клиентов без HTML)
+    plain_message = f"""
+    Подтвердите ваш email для Slideee
+    
+    Спасибо за регистрацию на Slideee! Для завершения регистрации перейдите по ссылке:
+    {verification_link}
+    Если вы не регистрировались на Slideee, просто проигнорируйте это письмо.
+    ---
+    © 2023 Slideee. Все права защищены.
+    slideee.ru
     """
-    res = send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.email], html_message=html_message)
-    print(res)
+    # Отправка письма
+    send_mail(
+        subject = "Подтвердите ваш email на Slideee",
+        message=plain_message,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[user.email],
+        html_message=html_message
+    )
