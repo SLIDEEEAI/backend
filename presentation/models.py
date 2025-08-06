@@ -15,8 +15,12 @@ from presentation.manager import UserManager
 
 
 class Roles(models.Model):
-    name = models.CharField(max_length=128)
+    class Group(models.TextChoices):
+        LEARNER  = 'learn', 'Для учебы'
+        FOR_WORK_OR_PERSONAL  = 'work_personal', 'Для Работы/Для личного использования'
 
+    name = models.CharField(max_length=128)
+    group = models.CharField(choices=Group.choices, default=Group.LEARNER, max_length=55)
     class Meta:
         verbose_name = 'Role'
         verbose_name_plural = 'Roles'
