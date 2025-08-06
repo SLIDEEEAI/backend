@@ -212,5 +212,11 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'registration@slideee.ru'
 EMAIL_HOST_PASSWORD = 'registration@SLIDEmail'
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+
+EMAIL_TEMPLATE_CACHE = {
+    "verification_email": None,
+    "reset_password_email": None,
+}
+
 FRONTEND_URL = "https://slideee.ru"
 
