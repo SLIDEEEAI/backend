@@ -244,7 +244,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'role', 'is_active', 'is_staff', 'balance', 'presentation', 'created_at', 'updated_at', 'user_thumb']
+        fields = ['id', 'username', 'email', 'role', 'is_active', 'is_staff', 'balance', 'presentation', 'user_thumb', 'email_verified']
 
 
 # class ImageSerializer(serializers.Serializer):
