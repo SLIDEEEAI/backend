@@ -25,7 +25,7 @@ from pptx.enum.shapes import MSO_SHAPE_TYPE
 
 from datetime import datetime
 
-from .models import Picture, EmailVerificationToken
+from .models import Picture, EmailVerificationToken, PasswordResetToken
 import requests
 
 
@@ -547,11 +547,20 @@ def export_presentation(presentation, presentation_type) -> str:
     return url_path
 
 
-def get_email_template():
-    if settings.EMAIL_TEMPLATE_CACHE is None:
-        with open('templates/email/verification_email.html', 'r', encoding='utf-8') as f:
-            settings.EMAIL_TEMPLATE_CACHE = f.read()
-    return settings.EMAIL_TEMPLATE_CACHE
+def get_email_template(template_name="verification_email"):
+    # Проверяем, есть ли такой шаблон в кеше
+    if template_name not in settings.EMAIL_TEMPLATE_CACHE:
+        raise ValueError(f"Unknown template name: {template_name}")
+
+    # Если кеш для этого шаблона пустой, загружаем файл
+    if settings.EMAIL_TEMPLATE_CACHE[template_name] is None:
+        try:
+            with open(f'templates/email/{template_name}.html', 'r', encoding='utf-8') as f:
+                settings.EMAIL_TEMPLATE_CACHE[template_name] = f.read()
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Template file not found: templates/email/{template_name}.html")
+
+    return settings.EMAIL_TEMPLATE_CACHE[template_name]
 
 
 def send_verification_email(user):
@@ -564,7 +573,7 @@ def send_verification_email(user):
     verification_link = f"{settings.FRONTEND_URL}/verify-email/?token={token.token}"
 
     # Загрузка шаблона
-    html_message = get_email_template().replace('{{ verification_link }}', verification_link)
+    html_message = get_email_template("verification_email").replace('{{ verification_link }}', verification_link)
 
     # Текстовый вариант (для клиентов без HTML)
     plain_message = f"""
@@ -580,6 +589,38 @@ def send_verification_email(user):
     # Отправка письма
     send_mail(
         subject = "Подтвердите ваш email на Slideee",
+        message=plain_message,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[user.email],
+        html_message=html_message
+    )
+
+
+def send_reset_password_email(user):
+    # Генерация токена
+    token = get_random_string(64)
+    PasswordResetToken.objects.create(user=user, token=token)
+
+    # Формирование ссылки
+    reset_password_link = f"{settings.FRONTEND_URL}/auth/reset-password/?token={token}&email={user.email}"
+
+    # Загрузка шаблона
+    html_message = get_email_template("reset_password_email").replace('{{ reset_password_link }}', reset_password_link)
+
+    # Текстовый вариант (для клиентов без HTML)
+    plain_message = f"""
+    Сброс пароля на Slideee
+
+    Перейдите по ссылке для изменения пароля для аккаунта Slideee, связанного с вашей почтой:
+    {reset_password_link}
+    Если вы не отправляли запрос на изменение пароля, просто проигнорируйте это письмо.
+    ---
+    © 2023 Slideee. Все права защищены.
+    slideee.ru
+    """
+    # Отправка письма
+    send_mail(
+        subject="Сброс пароля на Slideee",
         message=plain_message,
         from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=[user.email],

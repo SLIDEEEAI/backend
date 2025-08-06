@@ -64,7 +64,9 @@ from .services import (
     generate_slide_heading,
     generate_images,
     generate_images2,
-    generate_custom_request, send_verification_email,
+    generate_custom_request,
+    send_verification_email,
+    send_reset_password_email,
 )
 
 import base64
@@ -474,20 +476,17 @@ class VerifyEmailView(APIView):
 
 
 class RequestPasswordResetView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     throttle_classes = (RequestToResetPassword, )
 
     def post(self, request):
-        user = request.user
-        token = get_random_string(64)
-        PasswordResetToken.objects.create(user=user, token=token)
-        reset_link = f"{settings.FRONTEND_URL}/reset-password/?token={token}&email={user.email}"
-        send_mail(
-            "Reset Your Password",
-            f"Click the link to reset your password: {reset_link}",
-            settings.DEFAULT_FROM_EMAIL,
-            [user.email]
-        )
+        user = User.objects.filter(email=request.data.get('email')).first()
+        if user is None:
+            return Response(
+                {"error": "user is not found"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        send_reset_password_email(user)
         return Response({"message": "Password reset email sent"}, status=status.HTTP_200_OK)
 
 
