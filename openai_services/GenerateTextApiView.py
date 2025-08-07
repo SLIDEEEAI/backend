@@ -12,7 +12,7 @@ class TextGenerationAPIView(APIView):
         #     return Response({'error': 'Test api is working'}, status=status.HTTP_200_OK)
 
         # Получаем параметры из тела запроса
-        model = request.data.get('model', "gpt-4-turbo")
+        model = request.data.get('model', "deepseek-chat")
 
         user_prompt = request.data.get('user_prompt')
         system_prompt = request.data.get('system_prompt', '')
