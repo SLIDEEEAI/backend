@@ -20,7 +20,7 @@ class ImageGenerationAPIView(APIView):
 
         try:
             # Вызов API OpenAI для генерации изображений
-            images = settings.OPENAI_CLIENT.images.generate(
+            images = settings.OPENAI_IMAGE_CLIENT.images.generate(
                 prompt=prompt,
                 model=model,
                 size=size,

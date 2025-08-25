@@ -199,6 +199,11 @@ OPENAI_CLIENT = OpenAI(
     # http_client=httpx.Client(proxy='http://109.248.32.81:3128')
 )
 
+OPENAI_IMAGE_CLIENT = OpenAI(
+    api_key="",
+    http_client=httpx.Client(proxy='http://109.248.32.81:3128')
+)
+
 PAYKEEPER_USER = "admin"
 PAYKEEPER_PASSWORD = "67f53b702716"
 

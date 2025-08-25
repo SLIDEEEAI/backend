@@ -49,7 +49,7 @@ def chat_competions_create(system_content: str) -> str | None:
 
 
 def images_generate(prompt: str):
-    response = settings.OPENAI_CLIENT.images.generate(
+    response = settings.OPENAI_IMAGE_CLIENT.images.generate(
         model="dall-e-2",
         prompt=prompt,
         size="1024x1024",
@@ -164,7 +164,7 @@ def generate_short_text(presentation_theme: str, max_tokens: int = 50) -> str:
 
 
 def images_generate_4(prompt: str):
-    response = settings.OPENAI_CLIENT.images.generate(
+    response = settings.OPENAI_IMAGE_CLIENT.images.generate(
         model="dall-e-3",
         prompt=prompt,
         size="1024x1024",
@@ -208,7 +208,7 @@ def generate_bullet_points(presentation_theme: str, max_items: int = 5) -> list[
 def generate_image_with_caption(presentation_theme: str) -> tuple[str, str]:
     # Генерация изображения и соответствующей подписи, которые могут использоваться для иллюстрации концепций или примеров в презентации.
     prompt = f"Сгенерируйте изображение и подпись, связанные с темой презентации: {presentation_theme}."
-    response = settings.OPENAI_CLIENT.images.generate(
+    response = settings.OPENAI_IMAGE_CLIENT.images.generate(
         model="dall-e-3",
         prompt=prompt,
         size="1024x1024",
@@ -297,7 +297,7 @@ def generate_images(presentation_theme: str, num_images: int = 3) -> list[str]:
 
     for _ in range(num_images):
         prompt = f"Сгенерируйте изображение по теме презентации: {presentation_theme}."
-        response = settings.OPENAI_CLIENT.images.generate(
+        response = settings.OPENAI_IMAGE_CLIENT.images.generate(
             model="dall-e-2",
             prompt=prompt,
             size="1024x1024",
