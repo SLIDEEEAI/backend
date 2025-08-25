@@ -301,7 +301,7 @@ def generate_images(presentation_theme: str, num_images: int = 3) -> list[str]:
             model="dall-e-2",
             prompt=prompt,
             size="1024x1024",
-            quality="hd",
+            # quality="hd",
             n=1,
         )
         if response.data:
