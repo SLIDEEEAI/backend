@@ -50,7 +50,7 @@ def chat_competions_create(system_content: str) -> str | None:
 
 def images_generate(prompt: str):
     response = settings.OPENAI_IMAGE_CLIENT.images.generate(
-        model="gpt-image-1",
+       model="dall-e-3",
         prompt=prompt,
         size="1024x1024",
         quality="standard",
@@ -298,7 +298,7 @@ def generate_images(presentation_theme: str, num_images: int = 3) -> list[str]:
     for _ in range(num_images):
         prompt = f"Сгенерируйте изображение по теме презентации: {presentation_theme}."
         response = settings.OPENAI_IMAGE_CLIENT.images.generate(
-            model="gpt-image-1",
+           model="dall-e-3",
             prompt=prompt,
             size="1024x1024",
             # quality="hd",
