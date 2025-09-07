@@ -44,6 +44,7 @@ def new_chat_members(message):
 
 @bot.message_handler(func=lambda message: True, chat_types=['group', 'channel', 'supergroup'], content_types=['left_chat_member'])
 def left_chat_member(message):
+    print(message)
     if str(message.chat.id) != Config.get_instance().telegram_group_id:
         return
     user, new = _create_tg_user_or_get(
