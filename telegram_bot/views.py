@@ -50,5 +50,6 @@ class WebhookView(APIView):
         """
 
         update = telebot.types.Update.de_json(request.body.decode('utf-8'))
+        print(update)
         bot.process_new_updates([update])
         return Response("", status=200)
