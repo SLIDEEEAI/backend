@@ -15,6 +15,7 @@ import httpx
 from openai import OpenAI
 from pathlib import Path
 from decouple import AutoConfig
+from yandex_cloud_ml_sdk import YCloudML
 
 BASE_DIR = Path(__file__).parent.parent.parent.parent
 
@@ -202,6 +203,11 @@ OPENAI_CLIENT = OpenAI(
 OPENAI_IMAGE_CLIENT = OpenAI(
     api_key="",
     http_client=httpx.Client(proxy='http://109.248.32.81:3128')
+)
+
+YANDEX_SDK = YCloudML(
+    folder_id="-",
+    auth="-",
 )
 
 PAYKEEPER_USER = "admin"

@@ -62,8 +62,6 @@ from .services import (
     generate_questions,
     generate_slide_title,
     generate_slide_heading,
-    generate_images,
-    generate_images2,
     generate_custom_request,
     send_verification_email,
     send_reset_password_email,

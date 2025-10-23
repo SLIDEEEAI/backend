@@ -1,16 +1,14 @@
-import hashlib
-
-import os, sys
-
+import sys
 import json
+import traceback
 
 from json import dumps
 from re import findall
 from io import BytesIO
 
-import requests
 from django.conf import settings
 from django.core.files.base import File, ContentFile
+from django.core.files.storage import default_storage
 from django.core.mail import send_mail
 from django.utils.crypto import get_random_string
 
@@ -25,8 +23,24 @@ from pptx.enum.shapes import MSO_SHAPE_TYPE
 
 from datetime import datetime
 
+from source.settings import YANDEX_SDK
 from .models import Picture, EmailVerificationToken, PasswordResetToken
 import requests
+
+
+def _generate_image(prompt):
+    try:
+        model = YANDEX_SDK.models.image_generation("yandex-art")
+        model = model.configure(width_ratio=1, height_ratio=2, seed=50)
+        operation = model.run_deferred([prompt])
+        result = operation.wait()
+        image_bytes = result.image_bytes
+        filename = f"yandex_art/{prompt.replace(' ', '_')}.jpeg"
+        saved_path = default_storage.save(filename, ContentFile(image_bytes))
+        file_url = settings.MEDIA_URL + saved_path
+        return file_url
+    except Exception as err:
+        print(traceback.format_exc())
 
 
 def chat_competions_create(system_content: str) -> str | None:
@@ -48,16 +62,20 @@ def chat_competions_create(system_content: str) -> str | None:
         return None
 
 
-def images_generate(prompt: str):
-    response = settings.OPENAI_IMAGE_CLIENT.images.generate(
-       model="dall-e-3",
-        prompt=prompt,
-        size="1024x1024",
-        quality="standard",
-        n=1,
-    )
-
-    return response.data[0].url if response.data else None
+def images_generate(prompt: str, engine='yandex'):
+    if engine == 'yandex':
+        image_url = _generate_image(prompt)
+    elif engine == 'dall-e':
+        response = settings.OPENAI_IMAGE_CLIENT.images.generate(
+            model="dall-e-3",
+            prompt=prompt,
+            size="1024x1024",
+            n=1,
+        )
+        image_url = response.data[0].url if response.data else None
+    else:
+        raise Exception('Non support engine: '+engine)
+    return image_url
 
 
 
@@ -163,17 +181,6 @@ def generate_short_text(presentation_theme: str, max_tokens: int = 50) -> str:
     return response.choices[0].message.content.strip()
 
 
-def images_generate_4(prompt: str):
-    response = settings.OPENAI_IMAGE_CLIENT.images.generate(
-        model="dall-e-3",
-        prompt=prompt,
-        size="1024x1024",
-        quality="standard",
-        n=1,
-    )
-
-    return response.data[0].url if response.data else None
-
 def generate_long_text(presentation_theme: str, max_tokens: int = 50) -> str:
     # Генерация длинного текста для подробного описания содержания презентации или конкретного слайда.
     messages = [
@@ -208,15 +215,8 @@ def generate_bullet_points(presentation_theme: str, max_items: int = 5) -> list[
 def generate_image_with_caption(presentation_theme: str) -> tuple[str, str]:
     # Генерация изображения и соответствующей подписи, которые могут использоваться для иллюстрации концепций или примеров в презентации.
     prompt = f"Сгенерируйте изображение и подпись, связанные с темой презентации: {presentation_theme}."
-    response = settings.OPENAI_IMAGE_CLIENT.images.generate(
-        model="dall-e-3",
-        prompt=prompt,
-        size="1024x1024",
-        quality="hd",
-        n=1,
-    )
-    if response.data:
-        image_url = response.data[0].url
+    image_url = _generate_image(prompt)
+    if image_url:
         caption = generate_short_text(presentation_theme)
         return image_url, caption
     else:
@@ -297,15 +297,9 @@ def generate_images(presentation_theme: str, num_images: int = 3) -> list[str]:
 
     for _ in range(num_images):
         prompt = f"Сгенерируйте изображение по теме презентации: {presentation_theme}."
-        response = settings.OPENAI_IMAGE_CLIENT.images.generate(
-           model="dall-e-3",
-            prompt=prompt,
-            size="1024x1024",
-            # quality="hd",
-            n=1,
-        )
-        if response.data:
-            images.append(response.data[0].url)
+        image_url = _generate_image(prompt)
+        if image_url:
+            images.append(image_url)
 
     return images
 
