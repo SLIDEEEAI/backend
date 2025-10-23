@@ -159,6 +159,11 @@ class GenerateSlidesSerializer(serializers.Serializer):
     slides = serializers.ListField(
         read_only=True
     )
+    engine = serializers.CharField(initial='yandex-art', default='yandex-art', write_only=True)
+    model = serializers.CharField(initial='dall-e-3', default='dall-e-3', write_only=True)
+    width_ratio = serializers.IntegerField(initial=1, default=1, write_only=True)
+    height_ratio = serializers.IntegerField(initial=2, default=2, write_only=True)
+    seed = serializers.IntegerField(initial=50, default=50, write_only=True)
 
     def validate(self, attrs: OrderedDict):
         return attrs

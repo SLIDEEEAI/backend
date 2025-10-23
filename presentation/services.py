@@ -29,10 +29,10 @@ from .models import Picture, EmailVerificationToken, PasswordResetToken
 import requests
 
 
-def _generate_image(prompt):
+def _generate_image(prompt, model="yandex-art", width_ratio=1, height_ratio=2, seed=50):
     try:
-        model = YANDEX_SDK.models.image_generation("yandex-art")
-        model = model.configure(width_ratio=1, height_ratio=2, seed=50)
+        model = YANDEX_SDK.models.image_generation(model)
+        model = model.configure(width_ratio=width_ratio, height_ratio=height_ratio, seed=seed)
         operation = model.run_deferred([prompt])
         result = operation.wait()
         image_bytes = result.image_bytes
@@ -63,14 +63,16 @@ def chat_competions_create(system_content: str) -> str | None:
         return None
 
 
-def images_generate(prompt: str, engine='yandex'):
+def images_generate(prompt: str, engine='yandex', model='yandex-art', width_ratio=1, height_ratio=2, seed=50):
     if engine == 'yandex':
-        image_url = _generate_image(prompt)
-    elif engine == 'dall-e':
+        image_url = _generate_image(prompt, model=model, width_ratio=width_ratio, height_ratio=height_ratio, seed=seed)
+    elif engine == 'openai':
+        if 'yandex' in model:
+            raise Exception('Yandex models does not support by OPENAI')
         response = settings.OPENAI_IMAGE_CLIENT.images.generate(
-            model="dall-e-3",
+            model=model or "dall-e-3",
             prompt=prompt,
-            size="1024x1024",
+            size="1024x1024" if not width_ratio and not height_ratio else f'{width_ratio}x{height_ratio}',
             n=1,
         )
         image_url = response.data[0].url if response.data else None
@@ -80,9 +82,9 @@ def images_generate(prompt: str, engine='yandex'):
 
 
 
-def generate_images_from_list(prompts: list[str]):
+def generate_images_from_list(prompts: list[str],  engine, model, width_ratio, height_ratio, seed):
     return [
-        images_generate(prompt) for prompt in prompts
+        images_generate(prompt, engine=engine, model=model,  width_ratio=width_ratio, height_ratio=height_ratio, seed=seed) for prompt in prompts
     ]
 
 import hashlib
@@ -213,10 +215,10 @@ def generate_bullet_points(presentation_theme: str, max_items: int = 5) -> list[
 
 
 
-def generate_image_with_caption(presentation_theme: str) -> tuple[str, str]:
+def generate_image_with_caption(presentation_theme: str, engine, model, width_ratio, height_ratio, seed) -> tuple[str, str]:
     # Генерация изображения и соответствующей подписи, которые могут использоваться для иллюстрации концепций или примеров в презентации.
     prompt = f"Сгенерируйте изображение и подпись, связанные с темой презентации: {presentation_theme}."
-    image_url = _generate_image(prompt)
+    image_url = images_generate(prompt, engine, model, width_ratio=width_ratio, height_ratio=height_ratio, seed=seed)
     if image_url:
         caption = generate_short_text(presentation_theme)
         return image_url, caption
@@ -292,13 +294,13 @@ def generate_slide_heading(presentation_theme: str) -> str:
     )
     return response.choices[0].message.content.strip()
 
-def generate_images(presentation_theme: str, num_images: int = 3) -> list[str]:
+def generate_images(presentation_theme: str, num_images, engine, model, width_ratio, height_ratio, seed) -> list[str]:
     # Генерация изображений, связанных с темой презентации.
     images = []
 
-    for _ in range(num_images):
+    for i in range(num_images):
         prompt = f"Сгенерируйте изображение по теме презентации: {presentation_theme}."
-        image_url = _generate_image(prompt)
+        image_url = images_generate(prompt, engine=engine, model=model, width_ratio=width_ratio, height_ratio=height_ratio, seed=seed+i)
         if image_url:
             images.append(image_url)
 

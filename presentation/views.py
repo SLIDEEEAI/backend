@@ -329,7 +329,12 @@ class GenerateBulletPointsView(APIView):
 class GenerateImageWithCaptionView(APIView):
     def post(self, request):
         presentation_theme = request.data.get('presentation_theme')
-        image_url, caption = generate_image_with_caption(presentation_theme)
+        engine = request.data.get('engine', 'yandex')
+        model = request.data.get('model', 'yandex-art')
+        width_ratio = request.data.get('presentation_theme', 1)
+        height_ratio = request.data.get('presentation_theme', 2)
+        seed = request.data.get('presentation_theme', 50)
+        image_url, caption = generate_image_with_caption(presentation_theme, engine=engine, model=model, width_ratio=width_ratio, height_ratio=height_ratio, seed=seed)
         return Response({'image_url': image_url, 'caption': caption}, status=status.HTTP_200_OK)
 
 class GenerateQuoteView(APIView):
@@ -379,8 +384,13 @@ class GenerateImagesView(APIView):
     def post(self, request):
         presentation_theme = request.data.get('presentation_theme')
         num_images = request.data.get('num_images', 1)
+        engine = request.data.get('engine', 'yandex')
+        model = request.data.get('model', 'yandex-art')
+        width_ratio = request.data.get('width_ratio', 1)
+        height_ratio = request.data.get('width_ratio', 2)
+        seed = request.data.get('width_ratio', 50)
 
-        image_urls = generate_images(presentation_theme, num_images)
+        image_urls = generate_images(presentation_theme, num_images=num_images, engine=engine, model=model, width_ratio=width_ratio, height_ratio=height_ratio, seed=seed)
 
         saved_images = []
         for url in image_urls:
@@ -582,7 +592,14 @@ class GenerateSlidesView(APIView):
             json=generate_json_object(
                 request.data["themes"],
                 serializer.data["slides"],
-                generate_images_from_list(serializer.data["slides"])
+                generate_images_from_list(
+                    serializer.data["slides"],
+                    engine=serializer.data.get('engine'),
+                    model=serializer.data.get('model'),
+                    width_ratio=serializer.data.get('width_ratio'),
+                    height_ratio=serializer.data.get('height_ratio'),
+                    seed=serializer.data.get('seed'),
+                )
             )
         )
 
