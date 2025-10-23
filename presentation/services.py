@@ -1,6 +1,7 @@
 import sys
 import json
 import traceback
+import uuid
 
 from json import dumps
 from re import findall
@@ -35,7 +36,7 @@ def _generate_image(prompt):
         operation = model.run_deferred([prompt])
         result = operation.wait()
         image_bytes = result.image_bytes
-        filename = f"yandex_art/{prompt.replace(' ', '_')}.jpeg"
+        filename = f"yandex_art/{str(uuid.uuid4())}.jpeg"
         saved_path = default_storage.save(filename, ContentFile(image_bytes))
         file_url = settings.MEDIA_URL + saved_path
         return f'https://slideee.ru{file_url}'
