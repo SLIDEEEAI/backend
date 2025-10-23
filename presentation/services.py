@@ -72,7 +72,7 @@ def images_generate(prompt: str, engine='yandex', model='yandex-art', width_rati
         response = settings.OPENAI_IMAGE_CLIENT.images.generate(
             model=model or "dall-e-3",
             prompt=prompt,
-            size="1024x1024" if not width_ratio and not height_ratio else f'{width_ratio}x{height_ratio}',
+            size=f'{width_ratio}x{height_ratio}' if all([width_ratio, height_ratio]) else "1024x1024",
             n=1,
         )
         image_url = response.data[0].url if response.data else None
