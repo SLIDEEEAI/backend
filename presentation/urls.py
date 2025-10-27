@@ -1,6 +1,7 @@
 from django.urls import path
 from .views import (
     RegistrationView,
+    ResendVerificationEmailView,
     VerifyEmailView,
     RequestPasswordResetView,
     ResetPasswordView,
@@ -56,6 +57,7 @@ from openai_services import (
 )
 urlpatterns = [
     path('users/registration', RegistrationView.as_view()),
+    path('user/resend-verification/', ResendVerificationEmailView.as_view(), name='resend-verification'),
     path('users/verify-email', VerifyEmailView.as_view()),
     path('users/email/request-reset-password', RequestPasswordResetView.as_view()),
     path('users/email/reset-password', ResetPasswordView.as_view()),

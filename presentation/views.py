@@ -19,6 +19,7 @@ from django.contrib.auth import authenticate, login
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import AccessToken
 
+from decorators.rate_limit_with_timeout import rate_limit_with_timeout
 from main.models import Config
 from presentation.models import Presentation, Transaction, Tariff, BalanceHistory, Balance, PromoCode, \
     EmailVerificationToken, PasswordResetToken, Roles
@@ -464,6 +465,38 @@ class RegistrationView(APIView):
             promocode_serializer.save(user)
         send_verification_email(user)
         return Response(response_data, status=status.HTTP_201_CREATED)
+
+
+class ResendVerificationEmailView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    retry_after = 120
+
+    @swagger_auto_schema(
+        responses={
+            200: "Письмо с верификацией отправлено",
+            400: "Аккаунт уже верифицирован"
+        }
+    )
+    @atomic
+    @rate_limit_with_timeout(lambda request: f"resend_verification:{request.user.id}", rate_seconds=retry_after)
+    def post(self, request, *args, **kwargs):
+        user = request.user
+
+        # Проверяем, не верифицирован ли пользователь уже
+        if user.email_verified:
+            return Response(
+                {"error": "Аккаунт уже верифицирован"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Отправляем письмо с верификацией
+        send_verification_email(user)
+
+        return Response(
+            {"message": "Письмо с верификацией отправлено на ваш email", "retry_after" : self.retry_after},
+            status=status.HTTP_200_OK
+        )
 
 
 class VerifyEmailView(APIView):
