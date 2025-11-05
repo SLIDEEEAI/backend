@@ -75,6 +75,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     user_thumb = models.CharField(max_length=255, blank=True, null=True)
     email = models.EmailField(db_index=True, unique=True)
     email_verified = models.BooleanField(default=False)
+    tariff = models.ForeignKey('presentation.Tariff', on_delete=models.SET_NULL, null=True, blank=True)
     role = models.ManyToManyField(Roles, default=[])
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)

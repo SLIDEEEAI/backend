@@ -121,6 +121,7 @@ class PaykeeperWebhookView(APIView):
         tariff = Tariff.objects.filter(price=amount).first()
         if tariff:
             transaction.user.presentation = F('presentation') + tariff.presentation_count
+            transaction.user.tariff = tariff
 
         transaction.user.save()
         transaction.save()
