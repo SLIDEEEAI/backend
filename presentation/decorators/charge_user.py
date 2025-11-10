@@ -47,6 +47,15 @@ def charge_user(amount, reason, wrap_response=True):
 
                     updated_balance = BalanceService.get_user_balance(request.user)
 
+                    # ДОБАВЛЯЕМ ЗАГОЛОВОК ДЛЯ ФРОНТЕНДА
+                    if not hasattr(response, 'headers'):
+                        response.headers = {}
+
+                    response.headers['X-Paid-Function'] = 'true'
+                    response.headers['X-Charged-Amount'] = str(amount)
+                    response.headers['X-Current-Balance'] = str(updated_balance.amount)
+                    response.headers['X-Reason'] = BalanceHistory.Reason(reason).value
+
                     if wrap_response:
                         original_data = response.data
 
