@@ -3,7 +3,7 @@ import os
 import random
 
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.exceptions import ValidationError
 
 from django.db.models import F
 from datetime import datetime
@@ -19,7 +19,7 @@ from django.contrib.auth import authenticate, login
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import AccessToken
 
-from decorators.rate_limit_with_timeout import rate_limit_with_timeout
+from presentation.decorators.rate_limit_with_timeout import rate_limit_with_timeout
 from main.models import Config
 from presentation.models import Presentation, Transaction, Tariff, BalanceHistory, Balance, PromoCode, \
     EmailVerificationToken, PasswordResetToken, Roles
@@ -49,6 +49,7 @@ from .serializers import (
     SharedPresentationRequestSerializer, ResetPasswordSerializer, VerifyEmailSerializer, RoleSerializer,
 
 )
+from .service_modules.balance_service import BalanceService
 
 from .services import (
     generate_json_object,
@@ -1042,36 +1043,30 @@ class ListBackgroundImages(APIView):
         return Response({'images': image_urls}, status=status.HTTP_200_OK)
 
 class UpdateBalanceAPIView(APIView):
-    permission_classes = (IsAuthenticated, )
+    permission_classes = (IsAuthenticated,)
 
     def post(self, request):
-        # request.user = User.objects.get(email='dddcfffd@gmail.com') # убери потом
         serializer = BalanceHistorySerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             data = serializer.validated_data
+            try:
+                if data['change_type'] == BalanceHistory.ChangeType.INCREASE:
+                    BalanceService.increase_balance(
+                        user=request.user,
+                        amount=data['amount_change'],
+                        reason=data['change_reason']
+                    )
+                elif data['change_type'] == BalanceHistory.ChangeType.DECREASE:
+                    BalanceService.decrease_balance(
+                        user=request.user,
+                        amount=data['amount_change'],
+                        reason=data['change_reason']
+                    )
 
-            balance = request.user.balance
+                return Response({"detail": "Balance updated successfully."}, status=status.HTTP_200_OK)
 
-            # balance = User.objects.get(email='dddcfffd@gmail.com').balance # убери потом
-
-            # Изменяем баланс в зависимости от типа изменения
-            if data['change_type'] == BalanceHistory.ChangeType.INCREASE:
-                balance.amount += Decimal(data['amount_change'])
-            elif data['change_type'] == BalanceHistory.ChangeType.DECREASE:
-                balance.amount -= Decimal(data['amount_change'])
-
-            # Сохраняем изменения баланса
-            balance.save()
-
-            # Создаем запись в истории изменений баланса
-            BalanceHistory.objects.create(
-                amount_change=data['amount_change'],
-                change_type=data['change_type'],
-                change_reason=data['change_reason'],
-                balance=balance,
-            )
-
-            return Response({"detail": "Balance updated successfully."}, status=status.HTTP_200_OK)
+            except ValidationError as e:
+                return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
