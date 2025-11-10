@@ -195,25 +195,25 @@ SIMPLE_JWT = {
 }
 
 OPENAI_CLIENT = OpenAI(
-    api_key="",
+    api_key=config("OPENAI_CLIENT_API_KEY"),
     base_url="https://api.deepseek.com",
     # http_client=httpx.Client(proxy='http://109.248.32.81:3128')
 )
 
 OPENAI_IMAGE_CLIENT = OpenAI(
-    api_key="",
-    http_client=httpx.Client(proxy='http://109.248.32.81:3128')
+    api_key=config("OPENAI_IMAGE_CLIENT_API_KEY"),
+    http_client=httpx.Client(proxy=config("OPENAI_IMAGE_CLIENT_PROXY")),
+    timeout=110,
 )
 
 YANDEX_SDK = YCloudML(
-    folder_id="-",
-    auth="-",
+    folder_id=config("YANDEX_SDK_FOLDER_ID"),
+    auth=config("YANDEX_SDK_AUTH"),
 )
 
-PAYKEEPER_USER = "admin"
-PAYKEEPER_PASSWORD = "67f53b702716"
-
-SERVER_PAYKEEPER = "https://slideee.server.paykeeper.ru"
+PAYKEEPER_USER = config("PAYKEEPER_USER")
+PAYKEEPER_PASSWORD = config("PAYKEEPER_PASSWORD")
+SERVER_PAYKEEPER = config("SERVER_PAYKEEPER")
 
 # SMTP настройки в settings.py
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
