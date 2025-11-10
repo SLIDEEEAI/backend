@@ -246,10 +246,12 @@ class TariffSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     role = RoleSerializer(many=True)
     balance = serializers.FloatField(source='balance.amount', required=False)
+    tariff_id = serializers.UUIDField(source='tariff.id')
+    scopes = ScopeSerializer(many=True, source='tariff.scopes')
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'role', 'is_active', 'is_staff', 'balance', 'presentation', 'user_thumb', 'email_verified']
+        fields = ['id', 'username', 'email', 'role', 'is_active', 'is_staff', 'balance', 'presentation', 'user_thumb', 'email_verified', 'tariff_id', 'scopes']
 
 
 # class ImageSerializer(serializers.Serializer):
