@@ -1,15 +1,23 @@
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
+from presentation.decorators.charge_user import charge_user
+from presentation.models import BalanceHistory
 from source import settings
 
 
 class TextGenerationAPIView(APIView):
-    def post(self, request, *args, **kwargs):
+    authentication_classes = (JWTAuthentication,)
+    permission_classes = (IsAuthenticated,)
 
-        # if request.data.get('test', 0) == "test":
-        #     return Response({'error': 'Test api is working'}, status=status.HTTP_200_OK)
+    @charge_user(
+        amount=50,
+        reason=BalanceHistory.Reason.TEXT_GENERATION_PAYMENT
+    )
+    def post(self, request, *args, **kwargs):
 
         # Получаем параметры из тела запроса
         model = request.data.get('model', "deepseek-chat")

@@ -257,7 +257,9 @@ class BalanceHistory(BaseModel):
         """
         Перечисление возможных причин изменения баланса пользователя.
         """
-        SLIDE_PAYMENT = 'SP', 'Оплата Генерации слайдов'
+        SLIDE_PAYMENT = 'SP', 'Оплата генерации слайдов'
+        TEXT_GENERATION_PAYMENT = 'TGP', 'Оплата Генерации текста'
+        IMAGE_GENERATION_PAYMENT = 'IGP', 'Оплата Генерации изображения'
         TOP_UP = 'TU', 'Пополнение'
         BONUS_TOP_UP = 'BT', 'Бонус за пополнение'
         BONUS_REGISTRATION = 'BNU', 'Бонус за регистрацию'
