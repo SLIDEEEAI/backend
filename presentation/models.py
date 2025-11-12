@@ -118,6 +118,22 @@ class User(AbstractBaseUser, PermissionsMixin):
             'access': str(refresh.access_token),
         }
 
+    def has_scope(self, scope_code):
+        """Проверяет есть ли у пользователя доступ к скоупу"""
+        if not self.tariff:
+            return False
+        return self.tariff.scopes.filter(code=scope_code).exists()
+
+    def get_scopes(self):
+        """Возвращает все скоупы пользователя"""
+        if not self.tariff:
+            return set()
+        return set(self.tariff.scopes.values_list('code', flat=True))
+
+    @property
+    def scopes_list(self):
+        """Property для удобного доступа к списку скоупов"""
+        return list(self.get_scopes())
 
 class EmailVerificationToken(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
@@ -205,40 +221,46 @@ class Transaction(BaseModel):
 
 
 class Scope(BaseModel):
-    title = models.CharField(max_length=255)
-    token_price = models.PositiveIntegerField(default=0)
+    """Скоупы/возможности системы/функции в тарифе"""
+    id = models.AutoField(primary_key=True)
+    title = models.CharField(max_length=100)
+    code = models.SlugField(unique=True, default="default_scope_code", max_length=64)  # Уникальный код для проверок
+    description = models.TextField(blank=True)
 
     def __str__(self):
-        return f'{self.title}: {self.token_price}'
+        return self.title
+
+    @classmethod
+    def ensure_exists(cls, code, title, description=""):
+        """Создает скоуп если не существует"""
+        obj, created = cls.objects.get_or_create(
+            code=code,
+            defaults={'title': title, 'description': description}
+        )
+        return obj, created
 
 
 class Tariff(BaseModel):
-    """
-    Модель для хранения информации о тарифах.
-
-    Поля:
-        id (UUIDField): Уникальный идентификатор тарифа.
-        name (CharField): Название тарифа.
-        price_per_day (DecimalField): Стоимость тарифа за день.
-
-    Methods:
-        __str__(): Возвращает строковое представление объекта.
-    """
-
+    """Тарифный план"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100)
     price = models.DecimalField(max_digits=10, decimal_places=2)
+    tokens_amount = models.PositiveIntegerField(default=0)
     scopes = models.ManyToManyField(Scope)
-    presentation_count = models.IntegerField()
+    is_active = models.BooleanField(default=True)
 
-    def __str__(self) -> str:
-        """
-        Возвращает строковое представление объекта.
-
-        Returns:
-            str: Название тарифа.
-        """
+    def __str__(self):
         return self.name
+
+
+# class TariffScope(BaseModel):
+#     """Связь тарифа и скоупов с дополнительными параметрами"""
+#     tariff = models.ForeignKey(Tariff, on_delete=models.CASCADE)
+#     scope = models.ForeignKey(Scope, on_delete=models.CASCADE)
+#     limit = models.IntegerField(null=True, blank=True)  # Лимит использования, если нужен
+#
+#     class Meta:
+#         unique_together = ['tariff', 'scope']
 
 
 class BalanceHistory(BaseModel):

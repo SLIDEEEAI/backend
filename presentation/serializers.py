@@ -226,7 +226,7 @@ class UserPresentationSerializer(serializers.ModelSerializer):
 class ScopeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Scope
-        fields = ['id', 'title', 'token_price']
+        fields = ['id', 'title', 'code', 'description']
 
 
 class RoleSerializer(serializers.ModelSerializer):
@@ -240,18 +240,25 @@ class TariffSerializer(serializers.ModelSerializer):
     scopes = ScopeSerializer(many=True)
     class Meta:
         model = Tariff
-        fields = ['id', 'name', 'price', 'presentation_count', 'scopes']
+        fields = ['id', 'name', 'price', 'tokens_amount', 'scopes']
 
 
 class UserSerializer(serializers.ModelSerializer):
     role = RoleSerializer(many=True)
     balance = serializers.FloatField(source='balance.amount', required=False)
-    tariff_id = serializers.UUIDField(source='tariff.id')
-    scopes = ScopeSerializer(many=True, source='tariff.scopes')
+    tariff_id = serializers.UUIDField(source='tariff.id', allow_null=True)
+    scopes = ScopeSerializer(many=True, source='tariff.scopes', allow_null=True)
 
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'role', 'is_active', 'is_staff', 'balance', 'presentation', 'user_thumb', 'email_verified', 'tariff_id', 'scopes']
+
+    def get_scopes(self, obj: User):
+        if obj.tariff:
+            # Возвращаем список скоупов тарифа
+            scopes = obj.tariff.scopes.all()
+            return ScopeSerializer(scopes, many=True).data
+        return []  # Возвращаем пустой список если тарифа нет
 
 
 # class ImageSerializer(serializers.Serializer):

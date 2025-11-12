@@ -23,14 +23,28 @@ class TransactionAdmin(admin.ModelAdmin):
 
 @admin.register(Scope)
 class ScopeAdmin(admin.ModelAdmin):
-    list_display = ['title', 'token_price']
+    list_display = ['id', 'title', 'code', 'description_short']
+    list_display_links = ['id', 'title']
+    search_fields = ['title', 'code', 'description']
+
+    def description_short(self, obj):
+        return obj.description[:50] + "..." if len(obj.description) > 50 else obj.description
+
+    description_short.short_description = 'Описание'
 
 
 @admin.register(Tariff)
 class TariffAdmin(admin.ModelAdmin):
-    list_display = ['name', 'price', 'presentation_count']
-    search_fields = ['name', 'price', 'presentation_count']
+    list_display = ['name', 'price', 'is_active', 'scopes_count']
+    list_display_links = ['name']
+    list_filter = ['is_active']
+    search_fields = ['name']
     filter_horizontal = ['scopes']
+
+    def scopes_count(self, obj):
+        return obj.scopes.count()
+
+    scopes_count.short_description = 'Кол-во скоупов'
 
 
 @admin.register(Balance)
