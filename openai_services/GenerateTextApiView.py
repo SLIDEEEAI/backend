@@ -5,6 +5,7 @@ from rest_framework import status
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from presentation.decorators.charge_user import charge_user
+from presentation.decorators.require_scope import require_scope
 from presentation.models import BalanceHistory
 from source import settings
 
@@ -13,6 +14,7 @@ class TextGenerationAPIView(APIView):
     authentication_classes = (JWTAuthentication,)
     permission_classes = (IsAuthenticated,)
 
+    @require_scope('generate_text')
     @charge_user(
         amount=50,
         reason=BalanceHistory.Reason.TEXT_GENERATION_PAYMENT
