@@ -39,7 +39,8 @@ def _generate_image(prompt, model="yandex-art", width_ratio=1, height_ratio=2, s
         filename = f"yandex_art/{str(uuid.uuid4())}.jpeg"
         saved_path = default_storage.save(filename, ContentFile(image_bytes))
         file_url = settings.MEDIA_URL + saved_path
-        return f'https://slideee.ru{file_url}'
+        # return f'https://slideee.ru{file_url}'
+        return f'{file_url}'
     except Exception as err:
         print(traceback.format_exc())
 

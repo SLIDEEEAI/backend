@@ -87,6 +87,9 @@ urlpatterns = [
     path("presentation/images/generate", GenerateImagesView.as_view()),
     path('presentation/gpt/request', GPTRequestView.as_view()),
 
+    path('generate/system/text', GenerateTextApiView.SystemTextGenerationAPIView.as_view()),
+    path('generate/system/image', GenerateImagesAPIView.SystemImageGenerationAPIView.as_view()),
+
     path('generate/text', GenerateTextApiView.TextGenerationAPIView.as_view()),
     path('generate/image', GenerateImagesAPIView.ImageGenerationAPIView.as_view()),
 
