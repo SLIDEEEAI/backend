@@ -1,6 +1,5 @@
 
 import os
-import random
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -9,7 +8,6 @@ from django.db.models import F
 from datetime import datetime
 
 from django.db.transaction import atomic
-from django.utils.crypto import get_random_string
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -28,7 +26,6 @@ from django.shortcuts import get_object_or_404
 from django.db import transaction as atomic_transaction
 from rest_framework import generics, serializers
 from decimal import Decimal
-
 
 from .serializers import (
     RegistrationSerializer,
@@ -50,6 +47,7 @@ from .serializers import (
 
 )
 from .service_modules.balance_service import BalanceService
+from .service_modules.presentations_service import PresentationsService
 
 from .services import (
     generate_json_object,
@@ -80,6 +78,14 @@ from .trottles import EnterPasswordReset, RequestToResetPassword
 class PaykeeperWebhookView(APIView):
     @atomic_transaction.atomic
     def post(self, request):
+
+
+        file_path = os.path.join(settings.MEDIA_ROOT, "example.txt")
+        with open(file_path, 'w+') as file:
+            file.write(json.dumps(request.data))
+
+        print(request.data)
+
         serializer = PaykeeperWebhookSerializer(data=request.data, many=True)
 
         if not serializer.is_valid():
@@ -870,26 +876,104 @@ class CurrentUserView(generics.RetrieveAPIView):
         return Response(serializer.data)
 
 
+# создание проекта
+
+def create_project_and_get_response(user: User, project_title: str):
+    try:
+        new_project = PresentationsService.create_empty_project(user, project_title)
+        return Response({"id": new_project.id}, status=status.HTTP_201_CREATED)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
 class CreateNewEmptyProject(APIView):
     authentication_classes = (JWTAuthentication, )
     permission_classes = (IsAuthenticated, )
 
+    @atomic
     def post(self, request):
-        try:
-            user = request.user
-            # Создаем презентацию
-            presentation = Presentation.objects.create(
-                user=user,
-                json="{\"group\": null, \"favourite\": false, \"removed\": false, \"date_created\": "+ str(datetime.now().timestamp()) +", \"date_edited\": "+ str(datetime.now().timestamp()) +", \"theme\": {\"background_color\": [255, 248, 220], \"font_info\": {\"titles\": {\"name\": \"Calibri\", \"size\": 44, \"bold\": true, \"italic\": false}, \"main_texts\": {\"name\": \"Calibri\", \"size\": 18, \"bold\": false, \"italic\": false}}}, \"len_slides\": 0, \"title\": \""+request.data.get('project_title')+"\", \"slides\": []}"
-            )
+        user = request.user
+        project_title = request.data.get('projectTitle', 'untitled')
+        return create_project_and_get_response(user, project_title)
+
+
+class CreateNewEmptyProjectForGenerating(APIView):
+    authentication_classes = (JWTAuthentication, )
+    permission_classes = (IsAuthenticated, )
+
+    slide_amount = 150
+    reason = BalanceHistory.Reason.SLIDE_PAYMENT
+
+    @atomic
+    def post(self, request):
+
+        if not request.data.get('projectTitle'):
+            return Response({'error': "Field '' is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not request.data.get('slidesNum'):
+            return Response({'error': "Field '' is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = request.user
+        project_title = request.data.get('projectTitle')
+        slides_num = request.data.get('slidesNum')
+        amount = self.slide_amount * slides_num
+
+        # Проверяем достаточно ли средств ДО выполнения операции
+        if not BalanceService.has_sufficient_funds(request.user, amount):
             return Response(
                 {
-                    "id": presentation.id
+                    "error": "Недостаточно средств на балансе",
+                    "required_amount": amount,
+                    "current_balance": BalanceService.get_user_balance(request.user).amount
                 },
-                status=status.HTTP_201_CREATED
+                status=status.HTTP_402_PAYMENT_REQUIRED
             )
-        except Exception as e:
-            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+        initial_balance = BalanceService.get_user_balance(request.user).amount
+
+        # Выполняем основную операцию
+        response = create_project_and_get_response(user, project_title)
+
+        # Если операция успешна (статус 2xx), списываем средства
+        if 200 <= response.status_code < 300:
+            try:
+                BalanceService.decrease_balance(
+                    user=request.user,
+                    amount=amount,
+                    reason=BalanceHistory.Reason.SLIDE_PAYMENT
+                )
+
+                updated_balance = BalanceService.get_user_balance(request.user)
+
+                # ДОБАВЛЯЕМ ЗАГОЛОВОК ДЛЯ ФРОНТЕНДА
+                if not hasattr(response, 'headers'):
+                    response.headers = {}
+
+                response.headers['X-Paid-Function'] = 'true'
+                response.headers['X-Charged-Amount'] = str(amount)
+                response.headers['X-Current-Balance'] = str(updated_balance.amount)
+                response.headers['X-Reason'] = self.reason.value
+
+                original_data = response.data
+
+                extended_response = {
+                    "success": True,
+                    "transaction": {
+                        "charged_amount": amount,
+                        "previous_balance": initial_balance,
+                        "new_balance": updated_balance.amount,
+                        "reason": self.reason.label,
+                        "transaction_message": "Средства успешно списаны"
+                    },
+                    "result": original_data
+                }
+
+                response.data = extended_response
+
+            except ValidationError as e:
+                print(f"Balance charge failed: {e}")
+
+        return response
 
 
 class RemoveImage(APIView):

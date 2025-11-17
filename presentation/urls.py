@@ -43,7 +43,7 @@ from .views import (
 
     GetUserReferralsView,
     UpdateUserInfo,
-    ResetUserAvatar, RoleAPIView
+    ResetUserAvatar, RoleAPIView, CreateNewEmptyProjectForGenerating
 )
 
 from rest_framework_simplejwt.views import (
@@ -101,8 +101,9 @@ urlpatterns = [
     path('paykeeper/get_payment_link', CreatePaymentLinkView.as_view()),
     path('tariffs/', TariffListView.as_view(), name='tariff-list'),
     path('current_user/', CurrentUserView.as_view(), name='current-user'),
-    path('presentation/new', CreateNewEmptyProject.as_view()),
 
+    path('presentation/create_empty_project', CreateNewEmptyProject.as_view()),
+    path('presentation/generate_new_project', CreateNewEmptyProjectForGenerating.as_view()),
 
     path('file/upload', UploadImage.as_view(), name='upload_image'),
     path('file/remove', RemoveImage.as_view(), name='remove_image'),
