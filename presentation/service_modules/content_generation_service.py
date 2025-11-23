@@ -48,8 +48,8 @@ class ContentGenerationService:
         engine = request.data.get('engine', 'yandex')
         model = request.data.get('model', 'yandex-art')
         width_ratio = request.data.get('width_ratio', 1)
-        height_ratio = request.data.get('width_ratio', 2)
-        seed = request.data.get('width_ratio', 50)
+        height_ratio = request.data.get('height_ratio', 2)
+        seed = request.data.get('seed', 50)
 
         image_urls = generate_images(prompt, num_images=num_images, engine=engine, model=model, width_ratio=width_ratio, height_ratio=height_ratio, seed=seed)
 

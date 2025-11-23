@@ -298,9 +298,8 @@ def generate_slide_heading(presentation_theme: str) -> str:
 def generate_images(presentation_theme: str, num_images, engine, model, width_ratio, height_ratio, seed) -> list[str]:
     # Генерация изображений, связанных с темой презентации.
     images = []
-
     for i in range(num_images):
-        prompt = f"Сгенерируйте изображение по теме презентации: {presentation_theme}."
+        prompt = f"{presentation_theme}"
         image_url = images_generate(prompt, engine=engine, model=model, width_ratio=width_ratio, height_ratio=height_ratio, seed=seed+i)
         if image_url:
             images.append(image_url)
