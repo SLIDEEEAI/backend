@@ -132,17 +132,13 @@ class PaykeeperWebhookView(APIView):
             with open(file_path, 'w+') as file:
                 file.write("hashes_inside")
 
-            s = id_param + sum_param + client_id_param + order_id_param + PAYKEEPER_POST_SECRET_WORD
+            s = id_param + sum_param + client_id_param + order_id_param + "NXXG5u3l)SrLqKXsZo"
 
             file_path = os.path.join(settings.MEDIA_ROOT, "s.txt")
             with open(file_path, 'w+') as file:
                 file.write(s)
 
             hash_result = hashlib.md5(s.encode())
-
-            file_path = os.path.join(settings.MEDIA_ROOT, "hash_result.txt")
-            with open(file_path, 'w+') as file:
-                file.write(hash_result)
 
             file_path = os.path.join(settings.MEDIA_ROOT, "hashes_results.txt")
             with open(file_path, 'w+') as file:
@@ -169,10 +165,6 @@ class PaykeeperWebhookView(APIView):
             # transaction.user.balance = F('presentation') + tariff.tokens_amount
             if tariff.price > transaction.user.tariff.price:
                 transaction.user.tariff = tariff
-
-            file_path = os.path.join(settings.MEDIA_ROOT, "complete_transaction_tariff_not_null.txt")
-            with open(file_path, 'w+') as file:
-                file.write(json.dumps(tariff))
 
         transaction.user.save()
         transaction.save()
