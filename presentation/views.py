@@ -177,6 +177,12 @@ class PaykeeperWebhookView(APIView):
         transaction.user.save()
         transaction.save()
 
+    def create_error_response(self, message, details=None, status=400):
+        """Helper method to create structured error responses."""
+        error_response = {'status': 'error', 'message': message}
+        if details:
+            error_response['details'] = details
+        return JsonResponse(error_response, status=status)
 
 class CreatePaymentLinkView(APIView):
 
