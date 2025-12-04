@@ -1,4 +1,4 @@
-
+import hashlib
 import os
 
 from django.conf import settings
@@ -21,7 +21,7 @@ from presentation.decorators.rate_limit_with_timeout import rate_limit_with_time
 from main.models import Config
 from presentation.models import Presentation, Transaction, Tariff, BalanceHistory, Balance, PromoCode, \
     EmailVerificationToken, PasswordResetToken, Roles
-from source.settings import PAYKEEPER_USER, PAYKEEPER_PASSWORD, SERVER_PAYKEEPER
+from source.settings import PAYKEEPER_USER, PAYKEEPER_PASSWORD, SERVER_PAYKEEPER, PAYKEEPER_POST_SECRET_WORD
 from django.shortcuts import get_object_or_404
 from django.db import transaction as atomic_transaction
 from rest_framework import generics, serializers
@@ -79,36 +79,46 @@ class PaykeeperWebhookView(APIView):
     @atomic_transaction.atomic
     def post(self, request):
 
+        # Пример запроса от Paykeeper
+        # {"id": "240711111", "sum": "899.00", "clientid": "8", "orderid": "a5252849-d8d9-4cd9-a596-f67db8bc2c50",
+        #  "key": "154d23e4da2f9938a1fbed64bb2f5908", "pk_hostname": "https://slideee.server.paykeeper.ru",
+        #  "ps_id": "127", "client_email": "is@mail.ru", "client_phone": "",
+        #  "service_name": "\u041f\u043e\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u0435 \u0431\u0430\u043b\u0430\u043d\u0441\u0430 SlideeeAI",
+        #  "card_number": "5100********3333", "card_holder": "Test Gateway", "card_expiry": "03/30",
+        #  "obtain_datetime": "2025-12-04 00:19:25", "RRN": "17647967655130", "APPROVAL_CODE": "",
+        #  "invoice_id": "20251204001844212"}
 
-        file_path = os.path.join(settings.MEDIA_ROOT, "example.txt")
+        file_path = os.path.join(settings.MEDIA_ROOT, "last_post_payment_webhook_request_data.txt")
         with open(file_path, 'w+') as file:
             file.write(json.dumps(request.data))
 
-        print(request.data)
+        # serializer = PaykeeperWebhookSerializer(data=request.data, many=True)
 
-        serializer = PaykeeperWebhookSerializer(data=request.data, many=True)
+        # if not serializer.is_valid():
+        #     return self.create_error_response('Invalid data', serializer.errors)
 
-        if not serializer.is_valid():
-            return self.create_error_response('Invalid data', serializer.errors)
+        request_id = request.data.get('id')
+        sum_amount = request.data.get('sum')
+        client_id = request.data.get('clientid')
+        order_id = request.data.get('orderid')
+        key = request.data.get('key')
 
-        for transaction_data in serializer.validated_data:
-            order_id = transaction_data['orderid']
-            status = transaction_data['status']
-            amount = transaction_data['pay_amount']
+        # request_ok = self.validate_paykeeper_request(request_id, sum_amount, client_id, order_id, key)
 
-            transaction = self.get_transaction(order_id)
-            if transaction.status == Transaction.Statuses.COMPLETED:
-                continue
+        # if not request_ok:
+        #     file_path = os.path.join(settings.MEDIA_ROOT, "Invalid_Paykeeper_request_hash.txt")
+        #     with open(file_path, 'w+') as file:
+        #         file.write(str(request_ok))
+        #     return self.create_error_response('Invalid Paykeeper request hash', {'orderid': order_id})
 
-            if not transaction:
-                return self.create_error_response('Transaction not found', {'orderid': order_id})
+        transaction = self.get_transaction(order_id)
+        if transaction.status == Transaction.Statuses.COMPLETED:
+            return self.create_error_response('The transaction has already been completed', {'orderid': order_id})
 
-            if status == 'success':
-                if not self.validate_amount(transaction, amount):
-                    return self.create_error_response('Amount mismatch',
-                                                      {'expected': transaction.amount, 'received': amount})
+        if not transaction:
+            return self.create_error_response('Transaction not found', {'orderid': order_id})
 
-                self.complete_transaction(transaction, amount)
+        self.complete_transaction(transaction)
 
         return JsonResponse({'status': 'success'}, status=200)
 
@@ -116,29 +126,56 @@ class PaykeeperWebhookView(APIView):
         """Helper method to retrieve the transaction based on the order_id."""
         return get_object_or_404(Transaction, order_id=order_id)
 
+    def validate_paykeeper_request(self, id_param, sum_param, client_id_param, order_id_param, key):
+        try:
+            file_path = os.path.join(settings.MEDIA_ROOT, "hashes_inside.txt")
+            with open(file_path, 'w+') as file:
+                file.write("hashes_inside")
+
+            s = id_param + sum_param + client_id_param + order_id_param + PAYKEEPER_POST_SECRET_WORD
+
+            file_path = os.path.join(settings.MEDIA_ROOT, "s.txt")
+            with open(file_path, 'w+') as file:
+                file.write(s)
+
+            hash_result = hashlib.md5(s.encode())
+
+            file_path = os.path.join(settings.MEDIA_ROOT, "hash_result.txt")
+            with open(file_path, 'w+') as file:
+                file.write(hash_result)
+
+            file_path = os.path.join(settings.MEDIA_ROOT, "hashes_results.txt")
+            with open(file_path, 'w+') as file:
+                file.write("key: " + key + "\nhash_result: " + hash_result.hexdigest())
+
+            return key == hash_result.hexdigest()
+        except Exception as e:
+            file_path = os.path.join(settings.MEDIA_ROOT, "validate_paykeeper_request_Exception.txt")
+            with open(file_path, 'w+') as file:
+                file.write(str(e))
+
     def validate_amount(self, transaction, amount):
         """Check if the received amount matches the transaction amount."""
         return amount == transaction.amount
 
-    def complete_transaction(self, transaction, amount):
+    def complete_transaction(self, transaction):
         """Complete the transaction, update user's balance and presentation count."""
         transaction.status = Transaction.Statuses.COMPLETED
-        transaction.user.balance.amount = F('balance') + transaction.amount
+        # transaction.user.balance.amount = F('balance') + transaction.amount
 
-        tariff = Tariff.objects.filter(price=amount).first()
+        tariff = Tariff.objects.filter(price=transaction.amount).first()
         if tariff:
-            transaction.user.presentation = F('presentation') + tariff.presentation_count
-            transaction.user.tariff = tariff
+            BalanceService.increase_balance(transaction.user, tariff.tokens_amount, BalanceHistory.Reason.TOP_UP)
+            # transaction.user.balance = F('presentation') + tariff.tokens_amount
+            if tariff.price > transaction.user.tariff.price:
+                transaction.user.tariff = tariff
+
+            file_path = os.path.join(settings.MEDIA_ROOT, "complete_transaction_tariff_not_null.txt")
+            with open(file_path, 'w+') as file:
+                file.write(json.dumps(tariff))
 
         transaction.user.save()
         transaction.save()
-
-    def create_error_response(self, message, details=None, status=400):
-        """Helper method to create structured error responses."""
-        error_response = {'status': 'error', 'message': message}
-        if details:
-            error_response['details'] = details
-        return JsonResponse(error_response, status=status)
 
 
 class CreatePaymentLinkView(APIView):
