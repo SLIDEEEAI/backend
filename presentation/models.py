@@ -226,6 +226,7 @@ class Scope(BaseModel):
     title = models.CharField(max_length=100)
     code = models.SlugField(unique=True, default="default_scope_code", max_length=64)  # Уникальный код для проверок
     description = models.TextField(blank=True)
+    visible_in_advantages = models.BooleanField(default=True)
 
     def __str__(self):
         return self.title
@@ -245,6 +246,15 @@ class Tariff(BaseModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100)
     price = models.DecimalField(max_digits=10, decimal_places=2)
+
+    special_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, default=None, blank=True)
+    extra_text = models.TextField(max_length=512, null=True, default=None, blank=True)
+
+    max_slides_count = models.IntegerField(null=True, default=None, blank=True)
+    max_imgs_gen_count = models.IntegerField(null=True, default=None, blank=True)
+    max_text_gen_count = models.IntegerField(null=True, default=None, blank=True)
+    one_token_cost = models.IntegerField(null=True, default=None, blank=True)
+
     tokens_amount = models.PositiveIntegerField(default=0)
     scopes = models.ManyToManyField(Scope)
     is_active = models.BooleanField(default=True)

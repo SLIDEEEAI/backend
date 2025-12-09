@@ -898,7 +898,7 @@ class ExportPresentationView(APIView):
 
 
 class TariffListView(generics.ListAPIView):
-    queryset = Tariff.objects.all()
+    queryset = Tariff.objects.filter(is_active = True)
     serializer_class = TariffSerializer
 
 

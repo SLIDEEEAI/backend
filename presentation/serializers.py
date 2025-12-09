@@ -226,7 +226,7 @@ class UserPresentationSerializer(serializers.ModelSerializer):
 class ScopeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Scope
-        fields = ['id', 'title', 'code', 'description']
+        fields = ['id', 'title', 'code', 'description', 'visible_in_advantages']
 
 
 class RoleSerializer(serializers.ModelSerializer):
@@ -240,7 +240,8 @@ class TariffSerializer(serializers.ModelSerializer):
     scopes = ScopeSerializer(many=True)
     class Meta:
         model = Tariff
-        fields = ['id', 'name', 'price', 'tokens_amount', 'scopes']
+        fields = ['id', 'name', 'price', 'special_price', 'tokens_amount', 'scopes',
+                  'extra_text', 'max_slides_count', 'max_imgs_gen_count', 'max_text_gen_count', 'one_token_cost']
 
 
 class UserSerializer(serializers.ModelSerializer):
