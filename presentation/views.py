@@ -851,13 +851,14 @@ class GetUserReferralsView(APIView):
         try:
             referrers = User.objects.filter(referrer=request.user).all()
             referrers_list = []
+            # user_referral_bonuses = BalanceHistory.objects.filter(balance=request.user.balance, change_reason=BalanceHistory.Reason.REFERRAL_TOP_UP).all()
 
             if referrers:
                 for user in referrers:
                     referrers_list.append({
                         "email" : user.email,
                         "date" : user.created_at,
-                        "tokens" : 1000
+                        "tokens" : Config.get_instance().referral_bonus
                     })
 
             return Response(referrers_list,
