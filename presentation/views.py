@@ -176,6 +176,7 @@ class PaykeeperWebhookView(APIView):
             error_response['details'] = details
         return JsonResponse(error_response, status=status)
 
+
 class CreatePaymentLinkView(APIView):
 
     authentication_classes = (JWTAuthentication, )
@@ -184,17 +185,18 @@ class CreatePaymentLinkView(APIView):
     def post(self, request):
         try:
             user = request.user
-            # user = User.objects.all().last()
-
             transaction_uuid = uuid.uuid4()
-            amount = request.data.get('pay_amount')
+
+            tariff_guid = request.data.get('tariff_uuid')
+            tariff = Tariff.objects.filter(id = tariff_guid).first()
+            tariff_price = tariff.price if not tariff.special_price else tariff.special_price
 
             token = self.get_paykeeper_token()
 
-            payment_data = self.build_payment_data(user, transaction_uuid, amount)
+            payment_data = self.build_payment_data(user, transaction_uuid, tariff_price)
             payment_link = self.create_invoice_link(payment_data, token)
 
-            self.save_transaction(transaction_uuid, user, amount, payment_link)
+            self.save_transaction(transaction_uuid, user, tariff_price, payment_link)
 
             return JsonResponse({'link': payment_link}, status=200)
 
