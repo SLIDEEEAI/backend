@@ -232,11 +232,11 @@ SERVER_PAYKEEPER = config("SERVER_PAYKEEPER")
 # DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'sm20.hosting.reg.ru'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'registration@sivka.online'
-EMAIL_HOST_PASSWORD = 'registration@SIVKAmail'
+EMAIL_HOST = config("EMAIL_HOST")
+EMAIL_PORT = config("EMAIL_PORT")
+EMAIL_USE_TLS = True if config("DEBUG_MODE") == "True" else False
+EMAIL_HOST_USER = config("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD")
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 EMAIL_TEMPLATE_CACHE = {
