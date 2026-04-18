@@ -21,7 +21,7 @@ from presentation.decorators.rate_limit_with_timeout import rate_limit_with_time
 from main.models import Config
 from presentation.models import Presentation, Transaction, Tariff, BalanceHistory, Balance, PromoCode, \
     EmailVerificationToken, PasswordResetToken, Roles
-from source.settings import PAYKEEPER_USER, PAYKEEPER_PASSWORD, SERVER_PAYKEEPER, PAYKEEPER_POST_SECRET_WORD
+from source.settings import PAYKEEPER_USER, PAYKEEPER_PASSWORD, SERVER_PAYKEEPER, PAYKEEPER_POST_SECRET_WORD, config
 from django.shortcuts import get_object_or_404
 from django.db import transaction as atomic_transaction
 from rest_framework import generics, serializers
@@ -88,10 +88,6 @@ class PaykeeperWebhookView(APIView):
         #  "obtain_datetime": "2025-12-04 00:19:25", "RRN": "17647967655130", "APPROVAL_CODE": "",
         #  "invoice_id": "20251204001844212"}
 
-        file_path = os.path.join(settings.MEDIA_ROOT, "last_post_payment_webhook_request_data.txt")
-        with open(file_path, 'w+') as file:
-            file.write(json.dumps(request.data))
-
         # serializer = PaykeeperWebhookSerializer(data=request.data, many=True)
 
         # if not serializer.is_valid():
@@ -103,13 +99,7 @@ class PaykeeperWebhookView(APIView):
         order_id = request.data.get('orderid')
         key = request.data.get('key')
 
-        # request_ok = self.validate_paykeeper_request(request_id, sum_amount, client_id, order_id, key)
-
-        # if not request_ok:
-        #     file_path = os.path.join(settings.MEDIA_ROOT, "Invalid_Paykeeper_request_hash.txt")
-        #     with open(file_path, 'w+') as file:
-        #         file.write(str(request_ok))
-        #     return self.create_error_response('Invalid Paykeeper request hash', {'orderid': order_id})
+        request_ok = self.validate_paykeeper_request(request_id, sum_amount, client_id, order_id, key)
 
         transaction = self.get_transaction(order_id)
         if transaction.status == Transaction.Statuses.COMPLETED:
@@ -127,28 +117,17 @@ class PaykeeperWebhookView(APIView):
         return get_object_or_404(Transaction, order_id=order_id)
 
     def validate_paykeeper_request(self, id_param, sum_param, client_id_param, order_id_param, key):
-        try:
-            file_path = os.path.join(settings.MEDIA_ROOT, "hashes_inside.txt")
-            with open(file_path, 'w+') as file:
-                file.write("hashes_inside")
-
-            s = id_param + sum_param + client_id_param + order_id_param + "NXXG5u3l)SrLqKXsZo"
-
-            file_path = os.path.join(settings.MEDIA_ROOT, "s.txt")
-            with open(file_path, 'w+') as file:
-                file.write(s)
-
-            hash_result = hashlib.md5(s.encode())
-
-            file_path = os.path.join(settings.MEDIA_ROOT, "hashes_results.txt")
-            with open(file_path, 'w+') as file:
-                file.write("key: " + key + "\nhash_result: " + hash_result.hexdigest())
-
-            return key == hash_result.hexdigest()
-        except Exception as e:
-            file_path = os.path.join(settings.MEDIA_ROOT, "validate_paykeeper_request_Exception.txt")
-            with open(file_path, 'w+') as file:
-                file.write(str(e))
+        s = id_param + sum_param + client_id_param + order_id_param + config("PAYKEEPER_POST_SECRET_WORD")
+        hash_result = hashlib.md5(s.encode())
+        return key == hash_result.hexdigest()
+        # try:
+        #     s = id_param + sum_param + client_id_param + order_id_param + config("PAYKEEPER_POST_SECRET_WORD")
+        #     hash_result = hashlib.md5(s.encode())
+        #     return key == hash_result.hexdigest()
+        # except Exception as e:
+        #     file_path = os.path.join(settings.LOGS_ROOT, "validate_paykeeper_request_Exception.txt")
+        #     with open(file_path, 'w+') as file:
+        #         file.write(str(e))
 
     def validate_amount(self, transaction, amount):
         """Check if the received amount matches the transaction amount."""
@@ -157,13 +136,15 @@ class PaykeeperWebhookView(APIView):
     def complete_transaction(self, transaction):
         """Complete the transaction, update user's balance and presentation count."""
         transaction.status = Transaction.Statuses.COMPLETED
-        # transaction.user.balance.amount = F('balance') + transaction.amount
 
         tariff = Tariff.objects.filter(price=transaction.amount).first()
+
+        if not tariff:
+            tariff = Tariff.objects.filter(special_price=transaction.amount).first()
+
         if tariff:
             BalanceService.increase_balance(transaction.user, tariff.tokens_amount, BalanceHistory.Reason.TOP_UP)
-            # transaction.user.balance = F('presentation') + tariff.tokens_amount
-            if tariff.price > transaction.user.tariff.price:
+            if transaction.user.tariff is None or tariff.price > transaction.user.tariff.price:
                 transaction.user.tariff = tariff
 
         transaction.user.save()
