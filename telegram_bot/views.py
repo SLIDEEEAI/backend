@@ -6,6 +6,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from source.settings import BASE_URL
 from telegram_bot.telegram_core import bot
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,7 @@ class SetWebHookView(APIView):
         if request.GET.get('pass') != 'LirilliLarila':
             return Response(f"ok", status=200)
         bot.remove_webhook()
-        url = 'https://slideee.ru/api/v1/webhook/'
+        url = f'https://{BASE_URL}/api/v1/webhook/'
         logger.info(f'Setting webhook URL {url}')
         res = bot.set_webhook(f'{url}')
         logger.info(f'Result {res}')
