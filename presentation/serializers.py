@@ -1,10 +1,11 @@
 import os
 
 from django.contrib.auth import authenticate, password_validation
+from django.core.cache import cache
 
 from django.core.exceptions import ValidationError
 
-from django.db.models import F
+from django.db.models import F, Case, When, DecimalField
 
 from django.forms.models import model_to_dict
 
@@ -229,6 +230,66 @@ class ScopeSerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'code', 'description', 'visible_in_advantages']
 
 
+class ExtendedScopeSerializer(serializers.Serializer):
+    """Сериализатор для скоупа с дополнительной информацией о тарифах"""
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    code = serializers.SlugField()
+    description = serializers.CharField()
+    visible_in_advantages = serializers.BooleanField()
+    cheapest_tariff_price = serializers.DecimalField(max_digits=10, decimal_places=2, allow_null=True)
+    cheapest_tariff_id = serializers.UUIDField(allow_null=True)
+    cheapest_tariff_name = serializers.CharField(allow_null=True)
+    is_in_current_tariff = serializers.BooleanField()
+    current_tariff_price = serializers.DecimalField(max_digits=10, decimal_places=2, allow_null=True)
+
+    def to_representation(self, instance):
+        # Получаем контекст с пользователем
+        user = self.context.get('user')
+
+        cache_key = f'scope_{instance.id}_cheapest_tariff'
+        cheapest_tariff = cache.get(cache_key)
+
+        # Находим самый дешёвый активный тариф с этим скоупом (если нет в кеше)
+        if cheapest_tariff is None:
+            cheapest_tariff = Tariff.objects.filter(
+                scopes=instance,
+                is_active=True
+            ).annotate(
+                actual_price=Case(
+                    When(special_price__isnull=False, then=F('special_price')),
+                    default=F('price'),
+                    output_field=DecimalField(max_digits=10, decimal_places=2)
+                )
+            ).order_by('actual_price').first()
+            cache.set(cache_key, cheapest_tariff, 3600)
+
+        # Проверяем, есть ли скоуп в активном тарифе пользователя
+        is_in_current_tariff = False
+        current_tariff_price = None
+
+        if user and user.tariff and user.tariff.is_active:
+            is_in_current_tariff = user.tariff.scopes.filter(id=instance.id).exists()
+            # Определяем актуальную цену тарифа пользователя
+            current_tariff_price = user.tariff.special_price if user.tariff.special_price is not None else user.tariff.price
+
+        data = {
+            'id': instance.id,
+            'title': instance.title,
+            'code': instance.code,
+            'description': instance.description,
+            'visible_in_advantages': instance.visible_in_advantages,
+            'cheapest_tariff_price': cheapest_tariff.special_price if cheapest_tariff and cheapest_tariff.special_price else (
+                cheapest_tariff.price if cheapest_tariff else None),
+            'cheapest_tariff_id': str(cheapest_tariff.id) if cheapest_tariff else None,
+            'cheapest_tariff_name': cheapest_tariff.name if cheapest_tariff else None,
+            'is_in_current_tariff': is_in_current_tariff,
+            'current_tariff_price': current_tariff_price,
+        }
+        return data
+
+
+
 class RoleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Roles
@@ -248,18 +309,30 @@ class UserSerializer(serializers.ModelSerializer):
     role = RoleSerializer(many=True)
     balance = serializers.FloatField(source='balance.amount', required=False)
     tariff_id = serializers.UUIDField(source='tariff.id', allow_null=True)
-    scopes = ScopeSerializer(many=True, source='tariff.scopes', allow_null=True)
+    scopes = serializers.SerializerMethodField()
+    tariff_price = serializers.DecimalField(source='tariff.price', max_digits=10, decimal_places=2, allow_null=True)
+    tariff_special_price = serializers.DecimalField(source='tariff.special_price', max_digits=10, decimal_places=2,allow_null=True)
+    tariff_name = serializers.CharField(source='tariff.name', allow_null=True)
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'role', 'is_active', 'is_staff', 'balance', 'presentation', 'user_thumb', 'email_verified', 'tariff_id', 'scopes']
+        fields = [
+            'id', 'username', 'email', 'role', 'is_active', 'is_staff',
+            'balance', 'presentation', 'user_thumb', 'email_verified',
+            'tariff_id', 'tariff_name', 'tariff_price', 'tariff_special_price', 'scopes'
+        ]
 
     def get_scopes(self, obj: User):
-        if obj.tariff:
-            # Возвращаем список скоупов тарифа
-            scopes = obj.tariff.scopes.all()
-            return ScopeSerializer(scopes, many=True).data
-        return []  # Возвращаем пустой список если тарифа нет
+        # Получаем все скоупы, которые есть в системе (можно кешировать)
+        all_scopes = Scope.objects.all()
+
+        # Возвращаем расширенные данные для каждого скоупа
+        serializer = ExtendedScopeSerializer(
+            all_scopes,
+            many=True,
+            context={'user': obj}
+        )
+        return serializer.data
 
 
 # class ImageSerializer(serializers.Serializer):
