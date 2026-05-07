@@ -84,7 +84,7 @@ urlpatterns = [
     path("presentation/questions/generate", GenerateQuestionsView.as_view()),
     path("presentation/slide_title/generate", GenerateSlideTitleView.as_view()),
     path("presentation/slide_heading/generate", GenerateSlideHeadingView.as_view()),
-    path("presentation/images/generate", GenerateImagesView.as_view()),
+    path("presentation/images/generate", GenerateImagesView.as_view()), # не используется
     path('presentation/gpt/request', GPTRequestView.as_view()),
 
     path('generate/system/text', GenerateTextApiView.SystemTextGenerationAPIView.as_view()),

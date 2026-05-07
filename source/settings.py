@@ -206,10 +206,14 @@ OPENAI_CLIENT = OpenAI(
     # http_client=httpx.Client(proxy='http://109.248.32.81:3128')
 )
 
+
+AITUNNEL_API_KEY = config("OPENAI_IMAGE_CLIENT_API_KEY")
+
 OPENAI_IMAGE_CLIENT = OpenAI(
-    api_key=config("OPENAI_IMAGE_CLIENT_API_KEY"),
-    http_client=httpx.Client(proxy=config("OPENAI_IMAGE_CLIENT_PROXY")),
-    timeout=110,
+    api_key=AITUNNEL_API_KEY,
+    base_url="https://api.aitunnel.ru/v1/",
+    #http_client=httpx.Client(proxy=config("OPENAI_IMAGE_CLIENT_PROXY")),
+    timeout=150,
 )
 
 YANDEX_SDK = YCloudML(
