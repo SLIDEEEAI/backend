@@ -6,6 +6,7 @@ import uuid
 from json import dumps
 from re import findall
 from io import BytesIO
+from typing import Generator, Dict
 
 from django.conf import settings
 from django.core.files.base import File, ContentFile
@@ -45,22 +46,37 @@ def _generate_image(prompt, model="yandex-art", width_ratio=1, height_ratio=2, s
         print(traceback.format_exc())
 
 
-def chat_competions_create(system_content: str) -> str | None:
-    # print(system_content)
-    # sys.stdout.flush()
+def chat_completion_create(system_content: str, temperature: float | None = 0.7) -> str | None:
+    """
+    Отправляет запрос к DeepSeek API и возвращает ответ.
+
+    Args:
+        system_content: Промпт для нейросети (системное сообщение)
+        temperature: Контролирует креативность (по-умолчанию 0.7 - баланс между точностью и креативностью)
+
+    Returns:
+        Текст ответа нейросети или None при ошибке
+    """
+
+    # Отправляем запрос к API DeepSeek через OpenAI-совместимый клиент
+    # settings.OPENAI_CLIENT - это предварительно настроенный клиент с API-ключом
     chat_completion: ChatCompletion = settings.OPENAI_CLIENT.chat.completions.create(
         messages=[
             {
-                "role": "system",
-                "content": system_content,
+                "role": "system",  # Системное сообщение - задает поведение нейросети
+                "content": system_content,  # Наш промпт с инструкцией
             }
         ],
         model="deepseek-chat",
+        temperature=temperature
     )
 
+    # Проверяем, есть ли ответ от нейросети
     if chat_completion.choices:
+        # Возвращаем текст первого (и единственного) ответа
         return chat_completion.choices[0].message.content
     else:
+        # Если ответа нет - возвращаем None
         return None
 
 
@@ -131,25 +147,165 @@ def generate_images2(presentation_theme, num_images):
         print(f"Error generating images: {e}")
         return []
 
+# common - Рисунок с текстом
+# commonReverse - Рисунок с текстом (развернутый)
+# textFW - Текст во всю длину
+# pictureFW - Картинка во всю длину
+# textWithPictureFW - Текст с картинкой во всю длину
+# twoPicturesWithCaption - 2 картинки с подписью
+# twoPicturesWithCaptionAndText - 2 картинки с подписью и текстом
+# twoPicturesWithCaptionAndLargeText - 2 маленькие картинки с подписью и текстом
+# threePicturesWithCaptionAndText - 3 картинки с подписью
+# threeListItemsWithTitlesAndTwoPictures - 2 маленькие картинки и список из трёх параграфов с подписью
+# threeListItemsWithTitlesAndTwoPicturesReverse - 2 маленькие картинки и список из трёх параграфов с подписью
+# fourListItemsWithTitlesAndBottomPicture - Список из 4 элементов списка и картинкой внизу
+# smallTextWithThreeListItems - Заголовок с текстом и списком из 3 элементов
 
-def generate_slides_theme(presentation_theme: str, slides_count: int) -> list[str]:
-    content = chat_competions_create(f"Write me short topics for slide headings in the amount of {slides_count} pieces. for a presentation on the topic '{presentation_theme}'' in Russian, in the form of a list without numbering, any enumeration, and any additional words.")
-    # content = chat_competions_create(f"Write me slide themes up to 10 words each in the amount of {slides_count} pcs. for a presentation on the topic {presentation_theme} in Russian, in a list without numbering or any enumeration, as well as any additional words!")
 
-    if content:
-        for x in findall(r"[^\W]\w+.*", content)[:slides_count]:
-            yield x.strip()
-    else:
-        yield None
+def generate_slides_with_templates(presentation_theme: str, slides_count: int) -> Generator[Dict[str, str], None, None]:
+    """
+    Генерирует слайды с заголовками и рекомендованными шаблонами.
+
+    Args:
+        presentation_theme: Тема презентации
+        slides_count: Количество слайдов (1-20)
+
+    Yields:
+        Словарь с ключами 'text' (заголовок) и 'templateName' (имя шаблона)
+    """
+
+    # Формируем описание доступных шаблонов для нейросети
+    templates_description = """
+    Доступные шаблоны слайдов:
+    - common: Рисунок с текстом (стандартный, рисунок справа)
+    - commonReverse: Рисунок с текстом (развернутый, рисунок слева)
+    - textFW: Текст во всю длину слайда
+    - pictureFW: Картинка во всю длину слайда
+    - textWithPictureFW: Текст с картинкой во всю длину
+    - twoPicturesWithCaption: 2 картинки с подписью
+    - twoPicturesWithCaptionAndText: 2 картинки с подписью и текстом
+    - twoPicturesWithCaptionAndLargeText: 2 маленькие картинки с подписью и большим текстом
+    - threePicturesWithCaptionAndText: 3 картинки с подписью
+    - threeListItemsWithTitlesAndTwoPictures: 2 маленькие картинки и список из трёх параграфов с подписью
+    - threeListItemsWithTitlesAndTwoPicturesReverse: 2 маленькие картинки и список из трёх параграфов с подписью (развернутый)
+    - fourListItemsWithTitlesAndBottomPicture: Список из 4 элементов и картинкой внизу
+    - smallTextWithThreeListItems: Заголовок с текстом и списком из 3 элементов
+    """
+
+    # Формируем запрос к нейросети с требованием вернуть JSON
+    system_prompt = f"""
+    Ты помогаешь создать структуру презентации на тему '{presentation_theme}'.
+    Нужно сгенерировать {slides_count} слайдов.
+
+    Для каждого слайда придумай:
+    1. Заголовок (короткий, 5-10 слов, на русском языке)
+    2. Подходящий шаблон из списка ниже, который лучше всего подходит для содержания этого заголовка
+
+    {templates_description}
+
+    Правила выбора шаблона:
+    - Для вводных, выводов, определений используй textFW
+    - Для демонстрации данных/графиков используй pictureFW или common
+    - Для сравнения двух элементов используй twoPicturesWithCaption
+    - Для инструкций/процессов используй threeListItemsWithTitlesAndTwoPictures
+    - Для ключевых метрик используй smallTextWithThreeListItems
+    - Для кейсов/примеров используй textWithPictureFW
+    
+
+    Ответ должен быть ТОЛЬКО в формате JSON массива:
+    [
+        {{"text": "Заголовок слайда 1", "templateName": "common"}},
+        {{"text": "Заголовок слайда 2", "templateName": "textFW"}}
+    ]
+
+    Не добавляй никаких пояснений, только JSON массив.
+    """
+
+    # Отправляем запрос к нейросети
+    content = chat_completion_create(system_prompt)
+
+    # Проверяем, что получили ответ
+    if not content:
+        # Если ошибка - возвращаем заглушку с дефолтным шаблоном
+        for i in range(slides_count):
+            yield {"text": f"Слайд {i + 1}", "templateName": "textFW"}
+        return
+
+    # Парсим JSON ответ от нейросети
+    try:
+        # Очищаем ответ от возможных маркеров кода markdown
+        content = content.strip()
+        if content.startswith("```json"):
+            content = content[7:]  # Убираем ```json
+        if content.startswith("```"):
+            content = content[3:]  # Убираем ```
+        if content.endswith("```"):
+            content = content[:-3]  # Убираем закрывающие ```
+
+        # Преобразуем JSON строку в Python объект
+        import json
+        slides_data = json.loads(content)
+
+        # Проверяем, что получили список
+        if not isinstance(slides_data, list):
+            raise ValueError("Ответ не является списком")
+
+        # Возвращаем первые slides_count слайдов
+        for slide in slides_data[:slides_count]:
+            # Валидация полей
+            if not isinstance(slide, dict):
+                continue
+            text = slide.get("text", "").strip()
+            template = slide.get("templateName", "common")
+
+            # Проверка, что шаблон существует в нашем списке
+            valid_templates = [
+                "common", "commonReverse", "textFW", "pictureFW",
+                "textWithPictureFW", "twoPicturesWithCaption",
+                "twoPicturesWithCaptionAndText", "twoPicturesWithCaptionAndLargeText",
+                "threePicturesWithCaptionAndText", "threeListItemsWithTitlesAndTwoPictures",
+                "threeListItemsWithTitlesAndTwoPicturesReverse",
+                "fourListItemsWithTitlesAndBottomPicture", "smallTextWithThreeListItems"
+            ]
+
+            if template not in valid_templates:
+                template = "common"  # Дефолтный шаблон
+
+            if text:
+                yield {"text": text, "templateName": template}
+            else:
+                yield {"text": "Без названия", "templateName": template}
+
+    except (json.JSONDecodeError, ValueError, AttributeError) as e:
+        # Если JSON некорректен, пробуем старый метод парсинга построчно
+        print(f"Ошибка парсинга JSON: {e}, пробуем fallback метод")
+
+        # Fallback: ищем строки с заголовками и назначаем им шаблоны по умолчанию
+        lines = findall(r"[^\W]\w+.*", content)
+        for i, line in enumerate(lines[:slides_count]):
+            # Простой алгоритм выбора шаблона на основе ключевых слов
+            text = line.strip()
+            template = "common"  # По умолчанию
+
+            if any(word in text.lower() for word in ["введение", "вступление", "цель", "задача"]):
+                template = "textFW"
+            elif any(word in text.lower() for word in ["итог", "вывод", "заключение", "результат"]):
+                template = "textFW"
+            elif any(word in text.lower() for word in ["данные", "статистика", "график", "показатель"]):
+                template = "pictureFW"
+            elif any(word in text.lower() for word in ["сравнение", "vs", "противопоставление"]):
+                template = "twoPicturesWithCaption"
+            elif any(word in text.lower() for word in ["шаг", "этап", "процесс", "алгоритм"]):
+                template = "threeListItemsWithTitlesAndTwoPictures"
+            elif any(word in text.lower() for word in ["пример", "кейс", "ситуация", "случай"]):
+                template = "textWithPictureFW"
+
+            yield {"text": text, "templateName": template}
 
 
-def generate_slides_text(slides_themes: list) -> list[str]:
+def generate_slides_text(slides_themes: list) -> list[str | None]:
     system_content = "You should write several sentences on each specified topic in Russian - {0}. Sentences should not exceed 500 words and each should contain a complete thought. You can also choose not to add words from yourself, briefly and only on the topic! Your complete answer should contain exactly - {1} sentences. The topics themselves should not appear in your answer!"
-    content = chat_competions_create(system_content.format(", ".join(slides_themes), len(slides_themes)))
-
-    print(f'{content=}')
-    sys.stdout.flush()
-
+    content = chat_completion_create(system_content.format(", ".join(slides_themes), len(slides_themes)))
     if content:
         for x in findall(r"\w+.*", content)[:len(slides_themes)]:
             yield x
@@ -157,7 +313,6 @@ def generate_slides_text(slides_themes: list) -> list[str]:
         yield None
 
 
-################### НОВЫЕ АПИ
 
 def generate_custom_request(prompt: str, max_tokens: int = 500) -> str:
     messages = [

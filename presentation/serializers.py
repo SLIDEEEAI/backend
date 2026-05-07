@@ -1,4 +1,5 @@
 import os
+from typing import Dict, Any, List
 
 from django.contrib.auth import authenticate, password_validation
 from django.core.cache import cache
@@ -14,7 +15,7 @@ from collections import OrderedDict
 from .models import Roles, Presentation, Tariff, BalanceHistory, PromoCode, PromoCodeUsage, Scope
 from rest_framework.serializers import ValidationError
 
-from .services import generate_slides_theme, generate_slides_text
+from .services import generate_slides_text, generate_slides_with_templates
 
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from datetime import date
@@ -124,31 +125,64 @@ class ChangePasswordSerializer(serializers.Serializer):
 
 
 class GenerateThemesSerializer(serializers.Serializer):
+    """
+    Сериализатор для валидации и генерации тем слайдов.
+    """
+    # Поле для ввода - тема презентации (только для записи)
     theme = serializers.CharField(
-        max_length=1024, write_only=True
+        max_length=1024,
+        write_only=True  # Поле используется только на входе, не возвращается в ответе
     )
-
+    # Поле для ввода - количество слайдов (только для записи)
     slides_count = serializers.IntegerField(
-        write_only=True, required=True
+        write_only=True,  # Поле используется только на входе
+        required=True  # Обязательное поле
     )
-
+    # Поле для вывода - список слайдов (только для чтения)
+    # Теперь каждый слайд - объект с text и templateName
     themes = serializers.ListField(
-        read_only=True
+        read_only=True  # Поле только для чтения, не принимается на входе
     )
 
-    def validate(self, attrs: OrderedDict):
+    def validate(self, attrs: OrderedDict) -> OrderedDict:
+        """
+        Валидация на уровне всех полей.
+        Args:
+            attrs: Словарь с валидированными данными
+        Returns:
+            Проверенные данные
+        Raises:
+            ValidationError: Если количество слайдов вне диапазона 1-20
+        """
+        # Получаем количество слайдов из атрибутов
         slides_count = attrs["slides_count"]
-        if not (slides_count < 21 and slides_count > 0):
+        # Проверяем, что количество слайдов в допустимом диапазоне
+        if not (1 <= slides_count <= 20):
             raise serializers.ValidationError(
                 "The number of slides cannot be less than 1 and more than 20"
             )
+        # Возвращаем проверенные данные
         return attrs
 
-    def create(self, validated_data: dict):
+    def create(self, validated_data: Dict[str, Any]) -> Dict[str, List[Dict[str, str]]]:
+        """
+        Генерация слайдов на основе валидированных данных.
+        Args:
+            validated_data: Проверенные данные с ключами 'theme' и 'slides_count'
+        Returns:
+            Словарь с ключом 'themes', содержащим список слайдов
+        """
+        # Извлекаем тему презентации
         theme = validated_data["theme"]
+        # Извлекаем количество слайдов
         slides_count = validated_data["slides_count"]
-        themes = [x for x in generate_slides_theme(theme, slides_count)]
-
+        # Генерируем слайды с помощью обновленной функции
+        # Теперь themes - это генератор, выдающий словари {text, templateName}
+        themes_generator = generate_slides_with_templates(theme, slides_count)
+        # Преобразуем генератор в список (массив объектов)
+        themes = list(themes_generator)
+        # Возвращаем словарь с результатом
+        # Сериализатор автоматически преобразует это в JSON
         return {"themes": themes}
 
 

@@ -604,16 +604,35 @@ class ChangePasswordView(APIView):
 
 
 class GenerateThemesView(APIView):
-    authentication_classes = (JWTAuthentication, )
-    permission_classes = (IsAuthenticated, )
+    """
+    API эндпоинт для генерации тем слайдов с шаблонами.
+    Доступен только авторизованным пользователям через JWT токен.
+    """
 
+    # Аутентификация через JWT токен
+    authentication_classes = (JWTAuthentication,)
+    # Проверка, что пользователь аутентифицирован
+    permission_classes = (IsAuthenticated,)
+
+    # Сериализатор для валидации входных данных
     serializer_class = GenerateThemesSerializer
 
     def post(self, request):
-        serializer = self.serializer_class(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
+        """
+        Обработка POST запроса.
+        Args:
+            request: HTTP запрос с данными {theme: str, slides_count: int}
+        Returns:
+            Response: JSON с сгенерированными слайдами
+        """
 
+        # Создаем экземпляр сериализатора с данными из запроса
+        serializer = self.serializer_class(data=request.data)
+        # Валидируем данные (проверяем theme и slides_count)
+        serializer.is_valid(raise_exception=True)
+        # Сохраняем данные (вызывается метод create сериализатора)
+        serializer.save()
+        # Возвращаем ответ с HTTP статусом 201 (Created)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
