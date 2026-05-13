@@ -172,7 +172,7 @@ class Picture(models.Model):
     source = models.ImageField(upload_to='pictures', default=None, null=True)
 
 class GeneratedImage(models.Model):
-    theme = models.CharField(max_length=255)
+    theme = models.CharField(max_length=2048)
     image = models.ImageField(upload_to='generated_images/')
     created_at = models.DateTimeField(auto_now_add=True)
 
