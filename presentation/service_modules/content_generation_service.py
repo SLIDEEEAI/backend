@@ -49,8 +49,6 @@ class ContentGenerationService:
 
         return response
 
-
-
     # --- НОВЫЙ МЕТОД ГЕНЕРАЦИИ ИЗОБРАЖЕНИЙ ---
     @staticmethod
     def image_generation(request):
@@ -65,12 +63,12 @@ class ContentGenerationService:
         print(f'Генерация для промпта: "{prompt}"')
 
         num_images = int(request.data.get('num_images', 1))
-        # model = request.data.get('model', ContentGenerationService.DEFAULT_IMAGE_MODEL)
         model = ContentGenerationService.DEFAULT_IMAGE_MODEL
         size = request.data.get('size', "1024x1024")
         quality = request.data.get('quality', "low")
 
         saved_images = []
+        errors = []
 
         for i in range(num_images):
             try:
@@ -85,8 +83,8 @@ class ContentGenerationService:
                     "prompt": prompt if num_images == 1 else f"{prompt} (вариант {i + 1})",
                     "n": 1,
                     "size": size,
-                    "quality": quality
-                    # "response_format": "b64_json",
+                    "quality": quality,
+                    # "response_format": "b64_json",  # Явно запрашиваем base64
                 }
 
                 print(f"Отправка запроса ({i + 1}/{num_images})...")
@@ -98,15 +96,17 @@ class ContentGenerationService:
                     timeout=150
                 )
 
+                # Обработка ошибок API
                 if response.status_code != 200:
-                    print(f"Ошибка API: {response.status_code} - {response.text}")
-                    continue
+                    error_data = response.json()
+                    error_message = ContentGenerationService._parse_api_error(error_data)
+                    # При первой же ошибке выбрасываем исключение
+                    raise Exception(error_message)
 
                 data = response.json()
 
                 if not data.get('data'):
-                    print("Нет данных в ответе")
-                    continue
+                    raise Exception("Пустой ответ от API")
 
                 # Получаем изображение
                 image_data = data['data'][0]
@@ -119,10 +119,8 @@ class ContentGenerationService:
                     img_response = http_requests.get(image_data['url'], timeout=30)
                     if img_response.status_code == 200:
                         saved_path = default_storage.save(file_name, ContentFile(img_response.content))
-
                     else:
-                        print(f"Не удалось скачать по URL: {img_response.status_code}")
-                        continue
+                        raise Exception(f"Не удалось скачать изображение (статус {img_response.status_code})")
 
                 # Пробуем получить base64
                 elif 'b64_json' in image_data and image_data['b64_json']:
@@ -131,15 +129,12 @@ class ContentGenerationService:
                         image_bytes = base64.b64decode(image_data['b64_json'])
                         saved_path = default_storage.save(file_name, ContentFile(image_bytes))
                     except Exception as decode_error:
-                        print(f"Ошибка декодирования base64: {decode_error}")
-                        continue
+                        raise Exception(f"Ошибка декодирования изображения: {decode_error}")
                 else:
-                    print("Нет ни URL, ни base64 в ответе")
-                    continue
+                    raise Exception("Неизвестный формат ответа от API")
 
                 if not saved_path:
-                    print("Не удалось сохранить изображение")
-                    continue
+                    raise Exception("Не удалось сохранить файл")
 
                 # Формируем публичный URL
                 file_url = settings.MEDIA_URL + saved_path
@@ -158,65 +153,57 @@ class ContentGenerationService:
                 })
                 print(f"✅ Изображение {i + 1} сохранено")
 
-                # Для отладки - сохраняем информацию о первом ответе
-                if i == 0:
-                    debug_path = os.path.join(settings.LOGS_ROOT, f"aitunnel_response_{uuid.uuid4()}.json")
-                    with open(debug_path, 'w', encoding='utf-8') as f:
-                        import json
-                        debug_data = data.copy()
-                        if 'data' in debug_data and debug_data['data']:
-                            for item in debug_data['data']:
-                                if 'b64_json' in item:
-                                    item['b64_json'] = f"[BASE64_STRING_LENGTH:{len(item['b64_json'])}]"
-                        json.dump(debug_data, f, indent=2, ensure_ascii=False)
-                    print(f"Ответ API сохранен в: {debug_path}")
-
+            except http_requests.exceptions.Timeout:
+                raise Exception("Превышено время ожидания ответа от API. Попробуйте позже.")
+            except http_requests.exceptions.ConnectionError:
+                raise Exception("Ошибка подключения к серверу генерации изображений. Проверьте интернет-соединение.")
             except Exception as e:
-                print(f"❌ Ошибка {i + 1}: {e}")
-                print(traceback.format_exc())
-                continue
+                # Пробрасываем исключение дальше
+                print(f"❌ Ошибка при генерации изображения {i + 1}: {e}")
+                raise
 
+        # Проверяем, что хотя бы одно изображение сгенерировано
         if not saved_images:
-            raise Exception("Не удалось сгенерировать ни одного изображения")
+            error_detail = "; ".join(errors) if errors else "Неизвестная ошибка при генерации изображений"
+            raise Exception(error_detail)
 
-        return saved_images  # Возвращаем список, а не Response
+        return saved_images
 
+    @staticmethod
+    def _parse_api_error(error_data):
+        """
+        Парсит ошибку от AITunnel API и возвращает понятное сообщение.
+        """
+        if 'error' not in error_data:
+            return "Неизвестная ошибка API"
 
+        error = error_data['error']
+        code = error.get('code')
+        message = error.get('message', '')
 
-    # # --- FOR U ---
-    # @staticmethod
-    # def image_generation(request):
-    #     prompt = request.data.get('presentation_theme')
-    #     num_images = request.data.get('num_images', 1)
-    #     engine = request.data.get('engine', 'yandex')
-    #     model = request.data.get('model', 'yandex-art')
-    #     width_ratio = request.data.get('width_ratio', 1)
-    #     height_ratio = request.data.get('height_ratio', 2)
-    #     seed = request.data.get('seed', 50)
-    #
-    #     image_urls = generate_images(prompt, num_images=num_images, engine=engine, model=model, width_ratio=width_ratio, height_ratio=height_ratio, seed=seed)
-    #
-    #     saved_images = []
-    #     for url in image_urls:
-    #
-    #         # Загружаем изображение
-    #         # response = requests.get(url)
-    #         # if response.status_code == 200:
-    #         #     # Генерируем уникальное имя файла
-    #         #     file_name = f"{uuid.uuid4()}.jpg"
-    #         #
-    #         #     # Сохраняем изображение
-    #         #     path = default_storage.save(f"generated_images/{file_name}", ContentFile(response.content))
-    #         #
-    #         # Создаем запись в базе данных
-    #         image = GeneratedImage.objects.create(
-    #             theme=prompt,
-    #             image=url
-    #         )
-    #         saved_images.append({
-    #             'id': image.id,
-    #             # 'url': request.build_absolute_uri(image.image.url)
-    #             'url': url
-    #         })
-    #
-    #     return saved_images
+        # Русскоязычные сообщения для различных ошибок
+        error_messages = {
+            'moderation_blocked': "Ваш запрос был отклонен системой безопасности. Пожалуйста, измените описание изображения, убрав неуместный или запрещенный контент.",
+            'invalid_request_error': "Некорректный запрос к API. Проверьте параметры запроса.",
+            'authentication_error': "Ошибка аутентификации. Обратитесь к администратору.",
+            'rate_limit_error': "Превышен лимит запросов. Попробуйте позже.",
+            'insufficient_quota': "Недостаточно средств на балансе. Пополните баланс в сервисе AITunnel.",
+        }
+
+        # Проверяем наличие специфических флагов в сообщении
+        if 'safety_violations' in message:
+            import re
+            violations = re.findall(r'safety_violations=\[(.*?)\]', message)
+            if violations:
+                return f"Ваш запрос был отклонен системой безопасности. Нарушение правил: {violations[0]}. Пожалуйста, измените описание."
+
+        # Возвращаем понятное сообщение на основе кода ошибки
+        if code in error_messages:
+            return error_messages[code]
+
+        # Если сообщение на русском, оставляем как есть
+        if any(russian_char in message for russian_char in 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя'):
+            return message
+
+        # Стандартное сообщение для неизвестных ошибок
+        return f"Ошибка генерации изображения: {message}" if message else "Неизвестная ошибка при генерации изображения"
