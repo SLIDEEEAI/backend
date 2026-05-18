@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import Roles, User, Presentation, Transaction, Tariff, BalanceHistory, Balance, PromoCode, PromoCodeUsage, \
-    Scope
+    Scope, GeneratedImage
 
 admin.site.register([
     Roles, User
@@ -73,3 +73,17 @@ class PromoCodeUsageAdmin(admin.ModelAdmin):
     list_display = ('user', 'promo_code', 'applied_at')
     list_filter = ('applied_at',)
     search_fields = ('user__username', 'promo_code__code')
+
+
+@admin.register(GeneratedImage)
+class GeneratedImageAdmin(admin.ModelAdmin):
+    list_display = ('id', 'theme_short', 'image', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('theme',)
+    readonly_fields = ('created_at',)
+
+    @admin.display(description='Тема')
+    def theme_short(self, obj):
+        if len(obj.theme) <= 100:
+            return obj.theme
+        return f'{obj.theme[:100]}...'
