@@ -3,8 +3,15 @@ from .models import Roles, User, Presentation, Transaction, Tariff, BalanceHisto
     Scope, GeneratedImage
 
 admin.site.register([
-    Roles, User
+    Roles
 ])
+
+
+@admin.register(User)
+class UserAdmin(admin.ModelAdmin):
+    list_display = ('id', 'email', 'username', 'email_verified', 'tariff', 'created_at')
+    search_fields = ('id', 'email', 'username')
+    list_filter = ('email_verified', 'tariff')
 
 
 @admin.register(Presentation)
