@@ -81,8 +81,15 @@ def charge_user(amount, reason, wrap_response=True):
                             }
 
                 except ValidationError as e:
-                    print(f"Balance charge failed: {e}")
-                    # Обработка ошибки списания...
+                    # print(f"Balance charge failed: {e}")
+                    return Response(
+                        {
+                            "error": f"Ошибка списания баланса: {e}",
+                            "required_amount": amount,
+                            "current_balance": BalanceService.get_user_balance(request.user).amount
+                        },
+                        status=status.HTTP_402_PAYMENT_REQUIRED
+                    )
 
             return response
 
