@@ -129,9 +129,6 @@ class ContentGenerationService:
 
                 data = response.json()
 
-                print("!!! Ответ от aitunnel: ")
-                print(json.dumps(data))
-
                 if not data.get('data'):
                     raise ImageGenerationError(
                         "Пустой ответ от API",
