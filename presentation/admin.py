@@ -84,9 +84,9 @@ class PromoCodeUsageAdmin(admin.ModelAdmin):
 
 @admin.register(GeneratedImage)
 class GeneratedImageAdmin(admin.ModelAdmin):
-    list_display = ('id', 'theme_short', 'image', 'created_at')
+    list_display = ('id', 'user', 'theme_short', 'image', 'created_at')
     list_filter = ('created_at',)
-    search_fields = ('theme',)
+    search_fields = ('theme', 'user')
     readonly_fields = ('created_at',)
 
     @admin.display(description='Тема')
