@@ -1,5 +1,6 @@
 import base64
-import os
+import json
+import logging
 import traceback
 import uuid
 import requests as http_requests
@@ -11,7 +12,15 @@ from openai import OpenAI
 
 from presentation.models import GeneratedImage
 from source import settings
-from source.settings import config
+
+logger = logging.getLogger(__name__)
+
+
+class ImageGenerationError(Exception):
+    def __init__(self, user_message, debug_details=None):
+        self.user_message = user_message
+        self.debug_details = debug_details or user_message
+        super().__init__(user_message)
 
 
 class ContentGenerationService:
@@ -67,12 +76,18 @@ class ContentGenerationService:
         size = request.data.get('size', "1024x1024")
         quality = request.data.get('quality', "low")
 
+        user = ContentGenerationService._resolve_user(request)
         saved_images = []
-        errors = []
+        failed_images = []
 
         for i in range(num_images):
+            theme = prompt if num_images == 1 else f"{prompt} (вариант {i + 1})"
+            image_record = GeneratedImage.objects.create(
+                user=user,
+                theme=theme,
+            )
+
             try:
-                # Формируем запрос к AITunnel
                 headers = {
                     "Authorization": f"Bearer {settings.AITUNNEL_API_KEY}",
                     "Content-Type": "application/json",
@@ -80,11 +95,11 @@ class ContentGenerationService:
 
                 payload = {
                     "model": model,
-                    "prompt": prompt if num_images == 1 else f"{prompt} (вариант {i + 1})",
+                    "prompt": theme,
                     "n": 1,
                     "size": size,
                     "quality": quality,
-                    # "response_format": "b64_json",  # Явно запрашиваем base64
+                    "moderation": "low"
                 }
 
                 print(f"Отправка запроса ({i + 1}/{num_images})...")
@@ -96,78 +111,191 @@ class ContentGenerationService:
                     timeout=150
                 )
 
-                # Обработка ошибок API
                 if response.status_code != 200:
-                    error_data = response.json()
-                    error_message = ContentGenerationService._parse_api_error(error_data)
-                    # При первой же ошибке выбрасываем исключение
-                    raise Exception(error_message)
+                    raw_response = response.text
+                    try:
+                        error_data = response.json()
+                    except ValueError:
+                        error_data = None
+
+                    user_message = ContentGenerationService._parse_api_error(error_data or {})
+                    debug_details = ContentGenerationService._format_debug_details(
+                        user_message=user_message,
+                        status_code=response.status_code,
+                        raw_response=raw_response,
+                        error_data=error_data,
+                    )
+                    raise ImageGenerationError(user_message, debug_details)
 
                 data = response.json()
 
-                if not data.get('data'):
-                    raise Exception("Пустой ответ от API")
+                print("!!! Ответ от aitunnel: ")
+                print(json.dumps(data))
 
-                # Получаем изображение
+                if not data.get('data'):
+                    raise ImageGenerationError(
+                        "Пустой ответ от API",
+                        ContentGenerationService._format_debug_details(
+                            user_message="Пустой ответ от API",
+                            status_code=response.status_code,
+                            raw_response=response.text,
+                            error_data=data,
+                        ),
+                    )
+
                 image_data = data['data'][0]
                 file_name = f"aitunnel_images/{str(uuid.uuid4())}.png"
                 saved_path = None
 
-                # Пробуем получить URL
                 if 'url' in image_data and image_data['url']:
-                    print(f"Скачивание изображения по URL...")
+                    print("Скачивание изображения по URL...")
                     img_response = http_requests.get(image_data['url'], timeout=30)
                     if img_response.status_code == 200:
                         saved_path = default_storage.save(file_name, ContentFile(img_response.content))
                     else:
-                        raise Exception(f"Не удалось скачать изображение (статус {img_response.status_code})")
+                        raise ImageGenerationError(
+                            "Не удалось скачать сгенерированное изображение. Попробуйте позже.",
+                            ContentGenerationService._format_debug_details(
+                                user_message=f"Не удалось скачать изображение (HTTP {img_response.status_code})",
+                                status_code=img_response.status_code,
+                                raw_response=img_response.text[:4000],
+                            ),
+                        )
 
-                # Пробуем получить base64
                 elif 'b64_json' in image_data and image_data['b64_json']:
-                    print(f"Декодирование base64 изображения...")
-                    try:
-                        image_bytes = base64.b64decode(image_data['b64_json'])
-                        saved_path = default_storage.save(file_name, ContentFile(image_bytes))
-                    except Exception as decode_error:
-                        raise Exception(f"Ошибка декодирования изображения: {decode_error}")
+                    print("Декодирование base64 изображения...")
+                    image_bytes = base64.b64decode(image_data['b64_json'])
+                    saved_path = default_storage.save(file_name, ContentFile(image_bytes))
                 else:
-                    raise Exception("Неизвестный формат ответа от API")
+                    raise ImageGenerationError(
+                        "Неизвестный формат ответа от API. Попробуйте позже.",
+                        ContentGenerationService._format_debug_details(
+                            user_message="Неизвестный формат ответа от API",
+                            error_data=data,
+                        ),
+                    )
 
                 if not saved_path:
-                    raise Exception("Не удалось сохранить файл")
+                    raise ImageGenerationError(
+                        "Не удалось сохранить изображение. Попробуйте позже.",
+                        ContentGenerationService._format_debug_details(
+                            user_message="Не удалось сохранить файл на диск",
+                        ),
+                    )
 
-                # Формируем публичный URL
-                file_url = settings.MEDIA_URL + saved_path
+                image_record.image = saved_path
+                image_record.save(update_fields=['image'])
+
+                file_url = default_storage.url(saved_path)
                 if not file_url.startswith("/"):
                     file_url = "/" + file_url
 
-                # Сохраняем в БД
-                image_record = GeneratedImage.objects.create(
-                    theme=prompt,
-                    image=file_url
-                )
-
                 saved_images.append({
                     'id': image_record.id,
-                    'url': file_url
+                    'url': file_url,
                 })
                 print(f"✅ Изображение {i + 1} сохранено")
 
-            except http_requests.exceptions.Timeout:
-                raise Exception("Превышено время ожидания ответа от API. Попробуйте позже.")
-            except http_requests.exceptions.ConnectionError:
-                raise Exception("Ошибка подключения к серверу генерации изображений. Проверьте интернет-соединение.")
+            except http_requests.exceptions.Timeout as e:
+                user_message = "Превышено время ожидания ответа от API. Попробуйте позже."
+                debug_details = ContentGenerationService._format_debug_details(
+                    user_message=user_message,
+                    extra=f"Exception: {e!r}",
+                    traceback_str=traceback.format_exc(),
+                )
+                ContentGenerationService._mark_image_failed(
+                    image_record, user_message, failed_images, debug_details
+                )
+            except http_requests.exceptions.ConnectionError as e:
+                user_message = "Ошибка подключения к серверу генерации изображений. Проверьте интернет-соединение."
+                debug_details = ContentGenerationService._format_debug_details(
+                    user_message=user_message,
+                    extra=f"Exception: {e!r}",
+                    traceback_str=traceback.format_exc(),
+                )
+                ContentGenerationService._mark_image_failed(
+                    image_record, user_message, failed_images, debug_details
+                )
+            except ImageGenerationError as e:
+                ContentGenerationService._mark_image_failed(
+                    image_record, e.user_message, failed_images, e.debug_details
+                )
             except Exception as e:
-                # Пробрасываем исключение дальше
-                print(f"❌ Ошибка при генерации изображения {i + 1}: {e}")
-                raise
+                user_message = "Ошибка при обработке запроса. Попробуйте позже."
+                debug_details = ContentGenerationService._format_debug_details(
+                    user_message=str(e),
+                    extra=f"Exception type: {type(e).__name__}",
+                    traceback_str=traceback.format_exc(),
+                )
+                ContentGenerationService._mark_image_failed(
+                    image_record, user_message, failed_images, debug_details
+                )
 
-        # Проверяем, что хотя бы одно изображение сгенерировано
         if not saved_images:
-            error_detail = "; ".join(errors) if errors else "Неизвестная ошибка при генерации изображений"
-            raise Exception(error_detail)
+            user_errors = "; ".join(item['error'] for item in failed_images)
+            user_message = user_errors or "Неизвестная ошибка при генерации изображений"
+            raise ImageGenerationError(user_message)
 
-        return saved_images
+        return {
+            'images': saved_images,
+            'failed': failed_images,
+        }
+
+    @staticmethod
+    def _resolve_user(request):
+        if request.user.is_authenticated:
+            return request.user
+
+        user_id = request.data.get('user_id')
+        if user_id:
+            from django.contrib.auth import get_user_model
+            return get_user_model().objects.get(pk=user_id)
+
+        raise ValueError("Пользователь не определён. Требуется аутентификация или поле user_id.")
+
+    @staticmethod
+    def _mark_image_failed(image_record, user_message, failed_images, debug_details=None):
+        details = debug_details or user_message
+        image_record.error_description = details
+        image_record.save(update_fields=['error_description'])
+        logger.error(
+            "Image generation failed (record_id=%s, user_id=%s):\n%s",
+            image_record.id,
+            image_record.user_id,
+            details,
+        )
+        print(f"❌ Ошибка генерации изображения (record_id={image_record.id}):\n{details}")
+        failed_images.append({
+            'id': image_record.id,
+            'error': user_message,
+        })
+
+    @staticmethod
+    def _format_debug_details(
+            user_message,
+            status_code=None,
+            raw_response=None,
+            error_data=None,
+            extra=None,
+            traceback_str=None,
+    ):
+        parts = [f"User message: {user_message}"]
+
+        if status_code is not None:
+            parts.append(f"HTTP status: {status_code}")
+        if error_data is not None:
+            parts.append(
+                "AITunnel JSON:\n"
+                + json.dumps(error_data, ensure_ascii=False, indent=2)
+            )
+        elif raw_response:
+            parts.append(f"AITunnel raw response:\n{raw_response}")
+        if extra:
+            parts.append(extra)
+        if traceback_str:
+            parts.append(f"Traceback:\n{traceback_str}")
+
+        return "\n\n".join(parts)
 
     @staticmethod
     def _parse_api_error(error_data):

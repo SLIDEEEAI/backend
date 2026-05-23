@@ -13,7 +13,11 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from presentation.decorators.charge_user import charge_user
 from presentation.decorators.require_scope import require_scope
 from presentation.models import BalanceHistory, GeneratedImage
-from presentation.service_modules.content_generation_service import ContentGenerationService
+from presentation.service_modules.content_generation_service import (
+    ContentGenerationService,
+    ImageGenerationError,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -35,18 +39,20 @@ class ImageGenerationAPIView(APIView):
             )
 
         try:
-            # Вызываем сервис генерации
-            images = ContentGenerationService.image_generation(request)
+            result = ContentGenerationService.image_generation(request)
+            images = result['images']
+            failed = result['failed']
 
-            # Успешный ответ
-            return Response(
-                {
-                    'success': True,
-                    'message': f'Успешно сгенерировано {len(images)} изображений',
-                    'images': images
-                },
-                status=status.HTTP_200_OK
-            )
+            response_data = {
+                'success': True,
+                'message': f'Успешно сгенерировано {len(images)} изображений',
+                'images': images,
+            }
+            if failed:
+                response_data['failed'] = failed
+                response_data['message'] += f', не удалось: {len(failed)}'
+
+            return Response(response_data, status=status.HTTP_200_OK)
 
         except ValueError as e:
             # Ошибка валидации (например, отсутствует prompt)
@@ -59,39 +65,52 @@ class ImageGenerationAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        except Exception as e:
-            # Ошибка генерации изображений
-            error_message = str(e)
+        except ImageGenerationError as e:
+            return self._build_generation_error_response(request, e.user_message, e.debug_details)
 
-            # Определяем тип ошибки для более точного HTTP статуса
-            if "отклонен системой безопасности" in error_message:
-                status_code = status.HTTP_400_BAD_REQUEST
-                error_code = 'moderation_blocked'
-            elif "Недостаточно средств" in error_message:
-                status_code = status.HTTP_402_PAYMENT_REQUIRED
-                error_code = 'insufficient_balance'
-            elif "Превышен лимит" in error_message:
-                status_code = status.HTTP_429_TOO_MANY_REQUESTS
-                error_code = 'rate_limit'
-            elif "Ошибка подключения" in error_message or "таймаут" in error_message.lower():
-                status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-                error_code = 'service_unavailable'
-            else:
-                status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-                error_code = 'generation_error'
-
-            # Логируем ошибку для администратора
-            logger.error(
-                f"Image generation failed for user {request.user.id if request.user.is_authenticated else 'unknown'}: {error_message}")
-
-            return Response(
-                {
-                    'success': False,
-                    'error': error_message,
-                    'code': error_code
-                },
-                status=status_code
+        except Exception:
+            logger.exception(
+                "Unexpected image generation error for user %s",
+                request.user.id if request.user.is_authenticated else 'unknown',
             )
+            return self._build_generation_error_response(
+                request,
+                "Ошибка при обработке запроса. Попробуйте позже.",
+            )
+
+    @staticmethod
+    def _build_generation_error_response(request, error_message, debug_details=None):
+        if debug_details:
+            logger.error(
+                "Image generation failed for user %s:\n%s",
+                request.user.id if request.user.is_authenticated else 'unknown',
+                debug_details,
+            )
+
+        if "отклонен системой безопасности" in error_message:
+            status_code = status.HTTP_400_BAD_REQUEST
+            error_code = 'moderation_blocked'
+        elif "Недостаточно средств" in error_message:
+            status_code = status.HTTP_402_PAYMENT_REQUIRED
+            error_code = 'insufficient_balance'
+        elif "Превышен лимит" in error_message:
+            status_code = status.HTTP_429_TOO_MANY_REQUESTS
+            error_code = 'rate_limit'
+        elif "Ошибка подключения" in error_message or "таймаут" in error_message.lower():
+            status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+            error_code = 'service_unavailable'
+        else:
+            status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+            error_code = 'generation_error'
+
+        return Response(
+            {
+                'success': False,
+                'error': error_message,
+                'code': error_code,
+            },
+            status=status_code,
+        )
 
 
 class SystemImageGenerationAPIView(APIView):
@@ -107,15 +126,20 @@ class SystemImageGenerationAPIView(APIView):
             )
 
         try:
-            images = ContentGenerationService.image_generation(request)
-            return Response(
-                {
-                    'success': True,
-                    'message': f'Успешно сгенерировано {len(images)} изображений',
-                    'images': images
-                },
-                status=status.HTTP_200_OK
-            )
+            result = ContentGenerationService.image_generation(request)
+            images = result['images']
+            failed = result['failed']
+
+            response_data = {
+                'success': True,
+                'message': f'Успешно сгенерировано {len(images)} изображений',
+                'images': images,
+            }
+            if failed:
+                response_data['failed'] = failed
+                response_data['message'] += f', не удалось: {len(failed)}'
+
+            return Response(response_data, status=status.HTTP_200_OK)
 
         except ValueError as e:
             return Response(
@@ -127,24 +151,14 @@ class SystemImageGenerationAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        except Exception as e:
-            error_message = str(e)
+        except ImageGenerationError as e:
+            return ImageGenerationAPIView._build_generation_error_response(
+                request, e.user_message, e.debug_details
+            )
 
-            if "отклонен системой безопасности" in error_message:
-                status_code = status.HTTP_400_BAD_REQUEST
-                error_code = 'moderation_blocked'
-            elif "Недостаточно средств" in error_message:
-                status_code = status.HTTP_402_PAYMENT_REQUIRED
-                error_code = 'insufficient_balance'
-            else:
-                status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-                error_code = 'generation_error'
-
-            return Response(
-                {
-                    'success': False,
-                    'error': error_message,
-                    'code': error_code
-                },
-                status=status_code
+        except Exception:
+            logger.exception("Unexpected system image generation error")
+            return ImageGenerationAPIView._build_generation_error_response(
+                request,
+                "Ошибка при обработке запроса. Попробуйте позже.",
             )

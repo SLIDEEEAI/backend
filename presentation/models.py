@@ -172,9 +172,12 @@ class Picture(models.Model):
     source = models.ImageField(upload_to='pictures', default=None, null=True)
 
 class GeneratedImage(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='+', null=True, default=None)
     theme = models.CharField(max_length=2048)
-    image = models.ImageField(upload_to='generated_images/')
+    image = models.ImageField(upload_to='generated_images/', null=True, default=None )
     created_at = models.DateTimeField(auto_now_add=True)
+    error_description = models.TextField(null=True, default=None, blank=True)
+
 
     def __str__(self):
         return f"Image for theme: {self.theme}"
