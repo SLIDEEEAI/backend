@@ -5,7 +5,6 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 
 from django.db.models import F
-from datetime import datetime
 
 from django.db.transaction import atomic
 from drf_yasg import openapi
@@ -44,10 +43,12 @@ from .serializers import (
     PromoCodeApplySerializer,
     PresentationSerializer,
     SharedPresentationRequestSerializer, ResetPasswordSerializer, VerifyEmailSerializer, RoleSerializer,
+    TogglePresentationFlagSerializer,
 
 )
 from .service_modules.balance_service import BalanceService
 from .service_modules.presentations_service import PresentationsService
+from .pagination import PaginationError, get_request_value, paginate_queryset
 
 from .services import (
     generate_json_object,
@@ -691,7 +692,7 @@ class GenerateSlidesView(APIView):
         )
 
 
-class GetPresentationView(APIView):
+class PresentationView(APIView):
     authentication_classes = (JWTAuthentication, )
     permission_classes = (IsAuthenticated, )
 
@@ -700,15 +701,8 @@ class GetPresentationView(APIView):
     @swagger_auto_schema(
         operation_summary="Получение презентации",
         operation_description="Возвращает данные о презентации по её ID, если пользователь является её владельцем.",
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            required=["id"],
-            properties={
-                "id": openapi.Schema(type=openapi.TYPE_INTEGER, description="ID презентации"),
-            },
-        ),
         responses={
-            201: openapi.Response(
+            200: openapi.Response(
                 description="Успешный ответ",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
@@ -716,9 +710,7 @@ class GetPresentationView(APIView):
                         "id": openapi.Schema(type=openapi.TYPE_INTEGER, description="ID презентации"),
                         "author": openapi.Schema(type=openapi.TYPE_INTEGER, description="ID автора"),
                         "json": openapi.Schema(type=openapi.TYPE_OBJECT, description="JSON-содержимое презентации"),
-                        "shared_uid": openapi.Schema(type=openapi.TYPE_STRING,
-                                                     description="Уникальный идентификатор ссылки на презентацию"),
-                        "balance": openapi.Schema(type=openapi.TYPE_NUMBER, description="Баланс пользователя"),
+                        "shared_uid": openapi.Schema(type=openapi.TYPE_STRING, description="Уникальный идентификатор ссылки на презентацию"),
                     },
                 ),
             ),
@@ -726,33 +718,51 @@ class GetPresentationView(APIView):
             403: openapi.Response(description="Доступ к чужому проекту запрещён"),
         },
     )
-    def post(self, request):
-        if request and request.data["id"]:
-            presentation = Presentation.objects.filter(id=request.data["id"]).first()
-            if presentation:
+    def get(self, request, id):  # Добавлен параметр id
+        presentation = Presentation.objects.filter(id=id).first()  # Используем id из URL
+        if not presentation:
+            return Response(data="Presentation not found!", status=status.HTTP_400_BAD_REQUEST)
 
-                # проверка на подлинность проекта
-                if presentation.user.id != request.user.id:
-                    return Response(
-                        data="Access to someone else's project is denied.",
-                        status=403
-                    )
+        # проверка на подлинность проекта
+        if presentation.user.id != request.user.id:
+            return Response(data="Access to someone else's project is denied.",status=status.HTTP_403_FORBIDDEN)
 
-                return Response(
-                    {
-                        "id": presentation.id,
-                        "author": presentation.user.id,
-                        "json": json.loads(presentation.json),
-                        "shared_uid": str(presentation.share_link_uid),
-                        # -- uncomment
-                        # "balance" : presentation.user.balance
-                    },
-                    status=status.HTTP_201_CREATED
-                )
         return Response(
-            data="Presentation not found!",
-            status=400
+            {
+                "id": presentation.id,
+                'title': presentation.title,
+                "author": presentation.user.id,
+                'favourite': presentation.favourite,
+                'removed': presentation.removed,
+                "json": json.loads(presentation.json),
+                "shared_uid": str(presentation.share_link_uid),
+            },
+            status=status.HTTP_200_OK
         )
+
+    @swagger_auto_schema(
+        operation_summary="Удаление презентации",
+        operation_description="Удаляет данные о презентации по её ID, если пользователь является её владельцем.",
+        responses={
+            200: openapi.Response(
+                description="Успешный ответ",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    pattern='deleted'
+                ),
+            ),
+            400: openapi.Response(description="Презентация не найдена"),
+            403: openapi.Response(description="Доступ к чужому проекту запрещён"),
+        },
+    )
+    def delete(self, request, id):
+        presentation = Presentation.objects.filter(id=id).first()
+        if not presentation:
+            return Response(data="Presentation not found!", status=status.HTTP_400_BAD_REQUEST)
+        if presentation.user.id != request.user.id:
+            return Response(data="У вас нет доступа к этому проекту, так как вы не являетесь его владельцом.", status=status.HTTP_403_FORBIDDEN)
+        presentation.delete()
+        return Response(data='deleted', status=status.HTTP_200_OK)
 
 
 class GetPresentationSharedView(APIView):
@@ -776,6 +786,8 @@ class SavePresentationView(APIView):
         if request and request.data["id"]:
             presentation = Presentation.objects.filter(id=request.data["id"]).first()
             if presentation:
+                if request.data["title"]:
+                    presentation.title = request.data["title"] if request.data["title"] else "Untitled"
                 presentation.json = json.dumps(request.data["json"])
                 presentation.save()
 
@@ -789,49 +801,95 @@ class SavePresentationView(APIView):
         )
 
 
-class DeletePresentationView(APIView):
+class TogglePresentationFlagView(APIView):
     authentication_classes = (JWTAuthentication, )
     permission_classes = (IsAuthenticated, )
 
-    def post(self, request):
-        if request and request.data["id"]:
-            presentation = Presentation.objects.filter(id=request.data["id"]).first()
-            if presentation:
-                presentation.delete()
+    def patch(self, request):
+        serializer = TogglePresentationFlagSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-                return Response(
-                    data='deleted',
-                    status=status.HTTP_200_OK
-                )
+        presentation = Presentation.objects.filter(
+            id=serializer.validated_data['id'],
+            user=request.user,
+        ).first()
+        if not presentation:
+            return Response(
+                data='Presentation not found!',
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        field = serializer.validated_data['field']
+        try:
+            if field == 'favourite':
+                presentation.toggle_favourite()
+            else:
+                presentation.toggle_removed()
+        except ValueError as exc:
+            return Response(data=str(exc), status=status.HTTP_400_BAD_REQUEST)
+
         return Response(
-            data="Presentation not found!",
-            status=400
+            {
+                'id': presentation.id,
+                'favourite': presentation.favourite,
+                'removed': presentation.removed,
+            },
+            status=status.HTTP_200_OK,
         )
-
 
 
 class GetAllPresentationView(APIView):
     authentication_classes = (JWTAuthentication, )
     permission_classes = (IsAuthenticated, )
 
-    def post(self, request):
+    ALLOWED_FILTERS = {'favourite', 'removed'}
+
+    def _apply_list_filter(self, queryset, request):
+        list_filter = get_request_value(request, 'filter')
+        if list_filter in (None, ''):
+            return queryset.filter(removed=False)
+        if list_filter not in self.ALLOWED_FILTERS:
+            raise PaginationError(
+                f'filter: допустимые значения — {", ".join(sorted(self.ALLOWED_FILTERS))}'
+            )
+        if list_filter == 'favourite':
+            return queryset.filter(favourite=True)
+        elif list_filter == 'removed':
+            return queryset.filter(removed=True)
+        return queryset.filter(removed=False)
+
+    def get(self, request):
         try:
-            return Response({
-                    "presentations": [
-                        {
-                            "id": presentation.id,
-                            "author": presentation.user.id,
-                            "json": json.loads(presentation.json)
-                        } for presentation in Presentation.objects.filter(user=request.user).all()
-                    ]
-                },
-                status=status.HTTP_200_OK
-            )
-        except Exception as exc:
+            queryset = Presentation.objects.filter(user=request.user).order_by('-updated_at')
+            queryset = self._apply_list_filter(queryset, request)
             return Response(
-                data="Presentation not found!",
-                status=400
+                paginate_queryset(
+                    queryset,
+                    request,
+                    # results_key='presentations',
+                    item_serializer=lambda presentation: {
+                        'id': presentation.id,
+                        'title': presentation.title,
+                        'author': presentation.user.id,
+                        'favourite': presentation.favourite,
+                        'removed': presentation.removed,
+                        'shared_uuid': str(presentation.share_link_uid),
+                        'json': json.loads(presentation.json)
+                        if isinstance(presentation.json, str)
+                        else presentation.json,
+                    },
+                ),
+                status=status.HTTP_200_OK,
             )
+        except PaginationError as exc:
+            return Response(data=str(exc), status=status.HTTP_400_BAD_REQUEST)
+        except Exception:
+            return Response(
+                data='Presentation not found!',
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
 
 class UpdateUserInfo(APIView):
     authentication_classes = (JWTAuthentication, )

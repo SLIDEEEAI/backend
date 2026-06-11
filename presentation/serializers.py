@@ -228,6 +228,11 @@ class GetPresentationSerializer(serializers.Serializer):
         return validated_data
 
 
+class TogglePresentationFlagSerializer(serializers.Serializer):
+    id = serializers.IntegerField(required=True)
+    field = serializers.ChoiceField(choices=['favourite', 'removed'], required=True)
+
+
 class PaykeeperWebhookSerializer(serializers.Serializer):
     orderid = serializers.UUIDField(required=True)
     status = serializers.CharField(required=True)

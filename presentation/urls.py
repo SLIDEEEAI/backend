@@ -8,10 +8,10 @@ from .views import (
     ChangePasswordView,
     GenerateThemesView,
     GenerateSlidesView,
-    GetPresentationView,
+    PresentationView,
     GetAllPresentationView,
     SavePresentationView,
-    DeletePresentationView,
+    TogglePresentationFlagView,
     ExportPresentationView,
     GetUserBalanceView,
     GenerateShortTextView,
@@ -64,13 +64,14 @@ urlpatterns = [
     path('users/login', TokenObtainPairView.as_view()),
     path('users/change/password', ChangePasswordView.as_view()),
     path('users/login/refresh', TokenRefreshView.as_view()),
-    path('user/presentations', GetAllPresentationView.as_view()),
     path("presentation/themes/generate", GenerateThemesView.as_view()),
     path("presentation/slides/generate", GenerateSlidesView.as_view()),
-    path("presentation/get", GetPresentationView.as_view()),
-    path("presentation/shared/get", GetPresentationSharedView.as_view()),
+
+    path("presentation/list", GetAllPresentationView.as_view()),
+    path("presentation/<int:id>/", PresentationView.as_view()),
     path("presentation/save", SavePresentationView.as_view()),
-    path("presentation/delete", DeletePresentationView.as_view()),
+    path("presentation/toggle-flag", TogglePresentationFlagView.as_view()),
+    path("presentation/shared/get", GetPresentationSharedView.as_view()),
     path("presentation/export", ExportPresentationView.as_view()),
     path("presentation/getbalance", GetUserBalanceView.as_view()),
 
@@ -119,3 +120,5 @@ urlpatterns = [
     path('user/update', UpdateUserInfo.as_view()),
     path('user/reset_avatar', ResetUserAvatar.as_view()),
 ]
+
+
