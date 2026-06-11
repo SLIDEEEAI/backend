@@ -41,8 +41,11 @@ from .serializers import (
     UserSerializer,
     BalanceHistorySerializer,
     PromoCodeApplySerializer,
-    PresentationSerializer,
-    SharedPresentationRequestSerializer, ResetPasswordSerializer, VerifyEmailSerializer, RoleSerializer,
+    SharedPresentationRequestSerializer,
+    SharedPresentationSerializer,
+    ResetPasswordSerializer,
+    VerifyEmailSerializer,
+    RoleSerializer,
     TogglePresentationFlagSerializer,
 
 )
@@ -70,6 +73,7 @@ from .services import (
 
 import base64
 import json
+import uuid
 
 from django.http import JsonResponse
 from .models import User
@@ -736,7 +740,7 @@ class PresentationView(APIView):
                 'removed': presentation.removed,
                 'created_at': int(presentation.created_at.timestamp()),
                 'updated_at': int(presentation.updated_at.timestamp()),
-                "shared_uid": str(presentation.share_link_uid),
+                "share_link_uid": str(presentation.share_link_uid),
                 "json": json.loads(presentation.json),
             },
             status=status.HTTP_200_OK
@@ -770,14 +774,56 @@ class PresentationView(APIView):
 class GetPresentationSharedView(APIView):
     authentication_classes = (JWTAuthentication, )
     permission_classes = (AllowAny,)
-    queryset = Presentation.objects.select_related('user')
-    serializer_class = PresentationSerializer
+    serializer_class = SharedPresentationSerializer
 
-    @swagger_auto_schema(request_body=SharedPresentationRequestSerializer)
+    @swagger_auto_schema(
+        operation_summary='Получение презентации по публичной ссылке',
+        operation_description='Возвращает презентацию по share_link_uid. Авторизация не требуется.',
+        responses={
+            200: SharedPresentationSerializer,
+            404: openapi.Response(description='Презентация не найдена'),
+        },
+    )
+    def get(self, request, share_link_uid):
+        presentation = get_object_or_404(
+            Presentation.objects.select_related('user'),
+            share_link_uid=share_link_uid,
+            removed=False,
+        )
+        return Response(self.serializer_class(presentation).data, status=status.HTTP_200_OK)
+
+    @swagger_auto_schema(
+        request_body=SharedPresentationRequestSerializer,
+        operation_summary='Получение презентации по публичной ссылке (legacy)',
+        operation_description='Старый POST endpoint. Для нового фронта используйте GET /presentation/shared/<uuid>/.',
+    )
     def post(self, request):
         serializer = SharedPresentationRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        return Response(self.serializer_class(serializer.validated_data['presentation']).data)
+        presentation = serializer.validated_data['presentation']
+        if presentation.removed:
+            return Response(data='Presentation not found!', status=status.HTTP_404_NOT_FOUND)
+        return Response(self.serializer_class(presentation).data, status=status.HTTP_200_OK)
+
+
+class RegeneratePresentationShareLinkView(APIView):
+    authentication_classes = (JWTAuthentication, )
+    permission_classes = (IsAuthenticated,)
+    serializer_class = SharedPresentationSerializer
+
+    @swagger_auto_schema(
+        operation_summary='Сброс публичной ссылки презентации',
+        operation_description='Генерирует новый share_link_uid для презентации владельца. Старая ссылка перестаёт работать.',
+        responses={
+            200: SharedPresentationSerializer,
+            404: openapi.Response(description='Презентация не найдена'),
+        },
+    )
+    def post(self, request, id):
+        presentation = get_object_or_404(Presentation, id=id, user=request.user)
+        presentation.share_link_uid = uuid.uuid4()
+        presentation.save(update_fields=['share_link_uid', 'updated_at'])
+        return Response(self.serializer_class(presentation).data, status=status.HTTP_200_OK)
 
 
 class SavePresentationView(APIView):
@@ -876,7 +922,7 @@ class GetAllPresentationView(APIView):
                         'author': presentation.user.id,
                         'favourite': presentation.favourite,
                         'removed': presentation.removed,
-                        'shared_uuid': str(presentation.share_link_uid),
+                        'share_link_uid': str(presentation.share_link_uid),
                         'created_at': int(presentation.created_at.timestamp()),
                         'updated_at': int(presentation.updated_at.timestamp()),
                         'json': json.loads(presentation.json)
@@ -981,7 +1027,13 @@ class CurrentUserView(generics.RetrieveAPIView):
 def create_project_and_get_response(user: User, project_title: str):
     try:
         new_project = PresentationsService.create_empty_project(user, project_title)
-        return Response({"id": new_project.id}, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "id": new_project.id,
+                "share_link_uid": str(new_project.share_link_uid),
+            },
+            status=status.HTTP_201_CREATED,
+        )
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 

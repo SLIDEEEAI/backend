@@ -43,7 +43,8 @@ from .views import (
 
     GetUserReferralsView,
     UpdateUserInfo,
-    ResetUserAvatar, RoleAPIView, CreateNewEmptyProjectForGenerating
+    ResetUserAvatar, RoleAPIView, CreateNewEmptyProjectForGenerating,
+    RegeneratePresentationShareLinkView
 )
 
 from rest_framework_simplejwt.views import (
@@ -71,7 +72,8 @@ urlpatterns = [
     path("presentation/<int:id>/", PresentationView.as_view()),
     path("presentation/save", SavePresentationView.as_view()),
     path("presentation/toggle-flag", TogglePresentationFlagView.as_view()),
-    path("presentation/shared/get", GetPresentationSharedView.as_view()),
+    path("presentation/<int:id>/share-link/regenerate", RegeneratePresentationShareLinkView.as_view()),
+    path("presentation/shared/<uuid:share_link_uid>/", GetPresentationSharedView.as_view()),
     path("presentation/export", ExportPresentationView.as_view()),
     path("presentation/getbalance", GetUserBalanceView.as_view()),
 

@@ -1,3 +1,4 @@
+import json
 import os
 from typing import Dict, Any, List
 
@@ -246,6 +247,37 @@ class SharedPresentationRequestSerializer(serializers.Serializer):
         read_only=False,
         required=True,
     )
+
+
+class SharedPresentationSerializer(serializers.ModelSerializer):
+    author = serializers.IntegerField(source='user.pk', read_only=True)
+    share_link_uid = serializers.UUIDField(read_only=True)
+    json = serializers.SerializerMethodField()
+    created_at = serializers.SerializerMethodField()
+    updated_at = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Presentation
+        fields = (
+            'id',
+            'title',
+            'author',
+            'share_link_uid',
+            'created_at',
+            'updated_at',
+            'json',
+        )
+
+    def get_json(self, obj):
+        if isinstance(obj.json, str):
+            return json.loads(obj.json)
+        return obj.json
+
+    def get_created_at(self, obj):
+        return int(obj.created_at.timestamp())
+
+    def get_updated_at(self, obj):
+        return int(obj.updated_at.timestamp())
 
 
 class PresentationSerializer(serializers.ModelSerializer):
