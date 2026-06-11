@@ -1,8 +1,5 @@
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.db.models.signals import post_save, pre_save
-from django.dispatch import receiver
-from django.db import models
-from django.utils.timezone import now, timedelta
+from django.utils.timezone import now
 import uuid
 
 
@@ -149,19 +146,30 @@ class PasswordResetToken(models.Model):
 
 class Presentation(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='+')
-    author = models.IntegerField(null=True)
     title = models.CharField(max_length=255, null=True)
-    group = models.IntegerField(null=True)
     favourite = models.BooleanField(default=False)
     removed = models.BooleanField(default=False)
-    date_created = models.DateTimeField(null=True)
-    date_edited = models.DateTimeField(null=True)
-    theme = models.IntegerField(null=True)
     json = models.JSONField()
     share_link_uid = models.UUIDField(default=uuid.uuid4, editable=False)
 
     created_at = models.DateTimeField(auto_now_add=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True, blank=True)
+
+    def toggle_favourite(self):
+        if self.removed:
+            raise ValueError('Нельзя добавить в избранное удалённый проект')
+        self.favourite = not self.favourite
+        self.save(update_fields=['favourite', 'updated_at'])
+        return self.favourite
+
+    def toggle_removed(self):
+        self.removed = not self.removed
+        update_fields = ['removed', 'updated_at']
+        if self.removed:
+            self.favourite = False
+            update_fields.append('favourite')
+        self.save(update_fields=update_fields)
+        return self.removed
 
     def __str__(self):
         return f"Presentation ({self.id}) {self.user}"

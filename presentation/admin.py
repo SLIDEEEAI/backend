@@ -16,9 +16,11 @@ class UserAdmin(admin.ModelAdmin):
 
 @admin.register(Presentation)
 class PresentationAdmin(admin.ModelAdmin):
-    list_display = ('id', 'user', 'created_at', 'updated_at', 'share_link_uid')
+    list_display = ('id', 'user', 'title', 'created_at', 'updated_at', 'share_link_uid')
     search_fields = ('id', 'user__username', 'user__email', 'title', 'share_link_uid')
-    list_filter = ('date_created', 'date_edited', 'group', 'removed', 'user')
+    list_filter = ('favourite', 'removed', 'created_at', 'updated_at', 'user')
+    readonly_fields = ('id', 'share_link_uid', 'created_at', 'updated_at')
+    fields = ('id', 'user', 'title', 'favourite', 'removed', 'json', 'share_link_uid', 'created_at', 'updated_at')
 
 
 @admin.register(Transaction)

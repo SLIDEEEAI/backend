@@ -1,9 +1,4 @@
 import logging
-import uuid
-
-import requests
-from django.core.files.base import ContentFile
-from django.core.files.storage import default_storage
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -12,7 +7,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from presentation.decorators.charge_user import charge_user
 from presentation.decorators.require_scope import require_scope
-from presentation.models import BalanceHistory, GeneratedImage
+from presentation.models import BalanceHistory
 from presentation.service_modules.content_generation_service import (
     ContentGenerationService,
     ImageGenerationError,
@@ -114,8 +109,8 @@ class ImageGenerationAPIView(APIView):
 
 
 class SystemImageGenerationAPIView(APIView):
-    permission_classes = []  # Для системного эндпоинта без аутентификации
-    authentication_classes = []
+    permission_classes = (IsAuthenticated,)
+    authentication_classes = (JWTAuthentication,)
 
     def post(self, request):
         prompt = request.data.get('presentation_theme')
