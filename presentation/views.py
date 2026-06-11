@@ -734,8 +734,10 @@ class PresentationView(APIView):
                 "author": presentation.user.id,
                 'favourite': presentation.favourite,
                 'removed': presentation.removed,
-                "json": json.loads(presentation.json),
+                'created_at': int(presentation.created_at.timestamp()),
+                'updated_at': int(presentation.updated_at.timestamp()),
                 "shared_uid": str(presentation.share_link_uid),
+                "json": json.loads(presentation.json),
             },
             status=status.HTTP_200_OK
         )
@@ -875,6 +877,8 @@ class GetAllPresentationView(APIView):
                         'favourite': presentation.favourite,
                         'removed': presentation.removed,
                         'shared_uuid': str(presentation.share_link_uid),
+                        'created_at': int(presentation.created_at.timestamp()),
+                        'updated_at': int(presentation.updated_at.timestamp()),
                         'json': json.loads(presentation.json)
                         if isinstance(presentation.json, str)
                         else presentation.json,
