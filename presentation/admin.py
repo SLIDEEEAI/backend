@@ -7,12 +7,32 @@ admin.site.register([
 ])
 
 
+class UserPresentationInline(admin.TabularInline):
+    model = Presentation
+    fk_name = 'user'
+    extra = 0
+    can_delete = False
+    show_change_link = True
+    ordering = ('-created_at',)
+    fields = ('id', 'title', 'created_at', 'updated_at', 'favourite', 'removed', 'share_link_uid')
+    readonly_fields = fields
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    class Media:
+        css = {
+            'all': ('presentation/admin/user_presentations_inline.css',)
+        }
+
+
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
     list_display = ('id', 'email', 'username', 'email_verified', 'tariff', 'last_login', 'created_at')
     search_fields = ('id', 'email', 'username')
     list_filter = ('email_verified', 'tariff', 'last_login')
     readonly_fields = ('last_login', 'created_at', 'updated_at')
+    inlines = (UserPresentationInline,)
 
 
 @admin.register(Presentation)

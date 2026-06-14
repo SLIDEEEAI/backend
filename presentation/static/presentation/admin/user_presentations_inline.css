@@ -1,0 +1,14 @@
+[id="-1-group"] .tabular.inline-related {
+    max-height: 420px;
+    overflow: auto;
+}
+
+[id="-1-group"] .tabular.inline-related table {
+    margin-bottom: 0;
+}
+
+[id="-1-group"] .tabular.inline-related thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
