@@ -7,6 +7,7 @@ from django.core.cache import cache
 
 from django.core.exceptions import ValidationError
 
+from django.db import transaction
 from django.db.models import F, Case, When, DecimalField
 
 from django.forms.models import model_to_dict
@@ -461,21 +462,32 @@ class PromoCodeApplySerializer(serializers.Serializer):
         self.promo_code = promo_code
         return value
 
+    @transaction.atomic
     def save(self, user):
-        promo_code = self.promo_code
+        promo_code = PromoCode.objects.select_for_update().get(pk=self.promo_code.pk)
 
-        # Проверка одноразового использования
-        # breakpoint()
-        if promo_code.usage_type == PromoCode.SINGLE_USE:
-            if PromoCodeUsage.objects.filter(promo_code=promo_code, user=user).exists():
-                raise serializers.ValidationError("Этот промокод уже был использован вами.")
+        if not promo_code.is_active:
+            raise serializers.ValidationError("Промокод не найден или неактивен.")
 
-        # Проверка лимита использования для многоразового промокода
-        if promo_code.usage_type == PromoCode.MULTI_USE and promo_code.usage_limit <= 0:
+        if promo_code.expiration_date < date.today():
+            raise serializers.ValidationError("Промокод истёк.")
+
+        if promo_code.usage_limit <= 0:
             raise serializers.ValidationError("Лимит использования этого промокода исчерпан.")
 
-        # Применение промокода (пример: добавление токенов пользователю)
-        if hasattr(user, 'balance'):
+        if promo_code.user_access == PromoCode.NEW_USERS_ONLY and PromoCodeUsage.objects.filter(user=user).exists():
+            raise serializers.ValidationError("Этот промокод доступен только пользователям, которые ещё не вводили промокоды.")
+
+        if promo_code.usage_type == PromoCode.SINGLE_USE and PromoCodeUsage.objects.filter(promo_code=promo_code).exists():
+            raise serializers.ValidationError("Этот одноразовый промокод уже был использован.")
+
+        if promo_code.usage_type == PromoCode.MULTI_USE and PromoCodeUsage.objects.filter(
+            promo_code=promo_code,
+            user=user
+        ).exists():
+            raise serializers.ValidationError("Вы уже использовали этот промокод.")
+
+        if user.balance_id:
             user.balance.amount = F('amount') + promo_code.token_amount
             user.balance.save()
             BalanceHistory.objects.create(
@@ -488,10 +500,12 @@ class PromoCodeApplySerializer(serializers.Serializer):
         # Создание записи об использовании
         PromoCodeUsage.objects.create(user=user, promo_code=promo_code)
 
-        # Уменьшение лимита использования, если это многоразовый промокод
-        if promo_code.usage_type == PromoCode.MULTI_USE:
-            promo_code.usage_limit = F('usage_limit') - 1
-            promo_code.save()
+        promo_code.usage_limit = F('usage_limit') - 1
+        promo_code.save(update_fields=['usage_limit'])
+        promo_code.refresh_from_db(fields=['usage_limit'])
+        if promo_code.usage_limit == 0:
+            promo_code.is_active = False
+            promo_code.save(update_fields=['is_active'])
 
         return promo_code
 

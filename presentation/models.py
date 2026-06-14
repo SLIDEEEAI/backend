@@ -4,6 +4,8 @@ import uuid
 
 
 from django.db import models
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.contrib.auth.models import (
     AbstractBaseUser, PermissionsMixin
 )
@@ -361,22 +363,46 @@ class BalanceHistory(BaseModel):
 class PromoCode(models.Model):
     SINGLE_USE = 'single'
     MULTI_USE = 'multi'
+    NEW_USERS_ONLY = 'new_users_only'
+    ALL_USERS = 'all_users'
 
     USAGE_TYPE_CHOICES = [
         (SINGLE_USE, 'Одноразовый'),
         (MULTI_USE, 'Многоразовый'),
     ]
 
+    USER_ACCESS_CHOICES = [
+        (NEW_USERS_ONLY, 'Только для пользователей без промокодов'),
+        (ALL_USERS, 'Для всех пользователей'),
+    ]
+
     code = models.CharField(max_length=255, unique=True)  # Уникальный код промокода
     usage_type = models.CharField(max_length=10, choices=USAGE_TYPE_CHOICES)
-    usage_limit = models.PositiveIntegerField(default=1)  # Сколько раз можно использовать (для многоразовых)
+    usage_limit = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(0), MaxValueValidator(1000000)],
+        help_text='Сколько пользователей могут применить промокод. Для одноразового должно быть 1.'
+    )
     expiration_date = models.DateField()  # Дата окончания действия
     can_sum = models.BooleanField(default=False)  # Суммируется ли с другими промокодами
     is_active = models.BooleanField(default=True)  # Флаг активности
+    user_access = models.CharField(
+        max_length=20,
+        choices=USER_ACCESS_CHOICES,
+        default=ALL_USERS,
+        help_text='Кто может применить промокод.'
+    )
 
     token_amount = models.IntegerField(default=0)
 
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def clean(self):
+        super().clean()
+        if self.is_active and self.usage_limit < 1:
+            raise ValidationError({'usage_limit': 'У активного промокода срок жизни должен быть от 1 до 1000000.'})
+        if self.is_active and self.usage_type == self.SINGLE_USE and self.usage_limit != 1:
+            raise ValidationError({'usage_limit': 'Для одноразового промокода срок жизни должен быть 1.'})
 
     def __str__(self):
         return self.code

@@ -289,9 +289,24 @@ class BalanceHistoryAdmin(admin.ModelAdmin):
 
 @admin.register(PromoCode)
 class PromoCodeAdmin(admin.ModelAdmin):
-    list_display = ['code', 'usage_type', 'token_amount', 'remaining_days', 'can_sum', 'usage_limit', 'is_active', 'expiration_date']
-    list_filter = ['usage_type', 'can_sum', 'is_active']
+    list_display = [
+        'code',
+        'usage_type',
+        'user_access',
+        'token_amount',
+        'usage_limit',
+        'usages_count',
+        'remaining_days',
+        'can_sum',
+        'is_active',
+        'expiration_date'
+    ]
+    list_filter = ['usage_type', 'user_access', 'can_sum', 'is_active']
     search_fields = ['code']
+
+    @admin.display(description='Использований')
+    def usages_count(self, obj):
+        return PromoCodeUsage.objects.filter(promo_code=obj).count()
 
 
 @admin.register(PromoCodeUsage)
