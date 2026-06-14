@@ -198,6 +198,7 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
     "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
     "TOKEN_OBTAIN_SERIALIZER": "presentation.serializers.CustomTokenObtainPairSerializer",
+    "UPDATE_LAST_LOGIN": True,
 }
 
 OPENAI_CLIENT = OpenAI(

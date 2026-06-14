@@ -9,9 +9,10 @@ admin.site.register([
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
-    list_display = ('id', 'email', 'username', 'email_verified', 'tariff', 'created_at')
+    list_display = ('id', 'email', 'username', 'email_verified', 'tariff', 'last_login', 'created_at')
     search_fields = ('id', 'email', 'username')
-    list_filter = ('email_verified', 'tariff')
+    list_filter = ('email_verified', 'tariff', 'last_login')
+    readonly_fields = ('last_login', 'created_at', 'updated_at')
 
 
 @admin.register(Presentation)
