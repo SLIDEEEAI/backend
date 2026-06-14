@@ -12,3 +12,26 @@
     top: 0;
     z-index: 2;
 }
+
+.admin-history-table-wrapper {
+    max-height: 320px;
+    overflow: auto;
+}
+
+.admin-history-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.admin-history-table th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.admin-history-table th,
+.admin-history-table td {
+    padding: 8px;
+    border-bottom: 1px solid var(--hairline-color);
+    text-align: left;
+}

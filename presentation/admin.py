@@ -1,4 +1,7 @@
 from django.contrib import admin
+from django.utils import timezone
+from django.utils.html import format_html, format_html_join
+
 from .models import Roles, User, Presentation, Transaction, Tariff, BalanceHistory, Balance, PromoCode, PromoCodeUsage, \
     Scope, GeneratedImage
 
@@ -31,8 +34,111 @@ class UserAdmin(admin.ModelAdmin):
     list_display = ('id', 'email', 'username', 'email_verified', 'tariff', 'last_login', 'created_at')
     search_fields = ('id', 'email', 'username')
     list_filter = ('email_verified', 'tariff', 'last_login')
-    readonly_fields = ('last_login', 'created_at', 'updated_at')
+    readonly_fields = (
+        'last_login',
+        'created_at',
+        'updated_at',
+        'payment_history',
+        'promo_code_history',
+        'referral_history',
+    )
     inlines = (UserPresentationInline,)
+
+    @admin.display(description='История платежей')
+    def payment_history(self, obj):
+        if not obj or not obj.balance_id:
+            return 'Нет записей'
+
+        histories = BalanceHistory.objects.filter(balance=obj.balance).order_by('-created_at')
+        rows = (
+            (
+                history.amount_change,
+                history.get_change_type_display(),
+                history.get_change_reason_display(),
+                self._format_datetime(history.created_at),
+            )
+            for history in histories
+        )
+        return self._render_history_table(
+            headers=('Стоимость', 'Тип', 'Причина', 'Дата и время'),
+            rows=rows,
+        )
+
+    @admin.display(description='История ввода промокодов')
+    def promo_code_history(self, obj):
+        if not obj:
+            return 'Нет записей'
+
+        usages = PromoCodeUsage.objects.filter(user=obj).select_related('promo_code').order_by('-applied_at')
+        rows = (
+            (
+                usage.promo_code.code,
+                usage.promo_code.token_amount,
+                self._format_datetime(usage.applied_at),
+            )
+            for usage in usages
+        )
+        return self._render_history_table(
+            headers=('Промокод', 'Кол-во токенов', 'Дата и время'),
+            rows=rows,
+        )
+
+    @admin.display(description='История рефералов')
+    def referral_history(self, obj):
+        if not obj:
+            return 'Нет записей'
+
+        referrals = obj.referrals.order_by('-created_at')
+        rows = (
+            (
+                referral.id,
+                referral.email,
+                referral.username,
+                self._format_datetime(referral.created_at),
+            )
+            for referral in referrals
+        )
+        return self._render_history_table(
+            headers=('ID', 'Email', 'Username', 'Дата приглашения'),
+            rows=rows,
+        )
+
+    @staticmethod
+    def _format_datetime(value):
+        if not value:
+            return '-'
+        return timezone.localtime(value).strftime('%d.%m.%Y %H:%M:%S')
+
+    @staticmethod
+    def _render_history_table(headers, rows):
+        rows = tuple(rows)
+        if not rows:
+            return 'Нет записей'
+
+        header_html = format_html_join('', '<th>{}</th>', ((header,) for header in headers))
+        rows_html = format_html_join(
+            '',
+            '<tr>{}</tr>',
+            (
+                (format_html_join('', '<td>{}</td>', ((cell,) for cell in row)),)
+                for row in rows
+            )
+        )
+        return format_html(
+            '<div class="admin-history-table-wrapper">'
+            '<table class="admin-history-table">'
+            '<thead><tr>{}</tr></thead>'
+            '<tbody>{}</tbody>'
+            '</table>'
+            '</div>',
+            header_html,
+            rows_html,
+        )
+
+    class Media:
+        css = {
+            'all': ('presentation/admin/user_presentations_inline.css',)
+        }
 
 
 @admin.register(Presentation)
@@ -89,6 +195,8 @@ class BalanceHistoryAdmin(admin.ModelAdmin):
     list_display = ['amount_change', 'change_type', 'change_reason', 'balance', 'created_at']
     search_fields = ['balance__user_balance__username', 'balance__user_balance__email']
     list_filter = ['change_type', 'change_reason', 'created_at']
+    date_hierarchy = 'created_at'
+    ordering = ('-created_at',)
 
 
 @admin.register(PromoCode)
