@@ -1,3 +1,5 @@
+import json
+
 from django.contrib import admin
 from django.db.models import Avg, Count, Sum
 from django.utils import timezone
@@ -147,8 +149,27 @@ class PresentationAdmin(admin.ModelAdmin):
     list_display = ('id', 'user', 'title', 'created_at', 'updated_at', 'share_link_uid')
     search_fields = ('id', 'user__username', 'user__email', 'title', 'share_link_uid')
     list_filter = ('favourite', 'removed', 'created_at', 'updated_at', 'user')
-    readonly_fields = ('id', 'share_link_uid', 'created_at', 'updated_at')
-    fields = ('id', 'user', 'title', 'favourite', 'removed', 'json', 'share_link_uid', 'created_at', 'updated_at')
+    readonly_fields = ('id', 'share_link_uid', 'created_at', 'updated_at', 'pretty_json')
+    fields = ('id', 'user', 'title', 'favourite', 'removed', 'share_link_uid', 'created_at', 'updated_at', 'pretty_json')
+
+    @admin.display(description='JSON')
+    def pretty_json(self, obj):
+        value = obj.json
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError:
+                pass
+
+        formatted_json = json.dumps(value, ensure_ascii=False, indent=2)
+        return format_html('<pre class="pretty-json-field">{}</pre>', formatted_json)
+
+    class Media:
+        css = {
+            'all': ('presentation/admin/user_presentations_inline.css',)
+        }
+
+
 class TariffAmountListFilter(admin.SimpleListFilter):
     title = 'Тариф / стоимость тарифа'
     parameter_name = 'tariff'

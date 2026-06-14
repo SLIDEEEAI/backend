@@ -13,6 +13,20 @@
     z-index: 2;
 }
 
+.pretty-json-field {
+    max-height: 600px;
+    overflow: auto;
+    padding: 12px;
+    border: 1px solid var(--hairline-color);
+    border-radius: 4px;
+    background: var(--darkened-bg);
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
 .admin-history-table-wrapper {
     max-height: 320px;
     overflow: auto;
