@@ -1,0 +1,13 @@
+{% extends "admin/change_list.html" %}
+
+{% block result_list %}
+    {% if transaction_summary %}
+        <div class="transaction-summary">
+            <strong>Статистика по текущей выборке:</strong>
+            транзакций: {{ transaction_summary.transactions_count }},
+            сумма: {{ transaction_summary.total_amount|default:"0" }},
+            средний чек: {{ transaction_summary.average_amount|floatformat:2|default:"0" }}
+        </div>
+    {% endif %}
+    {{ block.super }}
+{% endblock %}

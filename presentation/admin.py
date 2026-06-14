@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.db.models import Avg, Count, Sum
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 
@@ -148,13 +149,79 @@ class PresentationAdmin(admin.ModelAdmin):
     list_filter = ('favourite', 'removed', 'created_at', 'updated_at', 'user')
     readonly_fields = ('id', 'share_link_uid', 'created_at', 'updated_at')
     fields = ('id', 'user', 'title', 'favourite', 'removed', 'json', 'share_link_uid', 'created_at', 'updated_at')
+class TariffAmountListFilter(admin.SimpleListFilter):
+    title = 'Тариф / стоимость тарифа'
+    parameter_name = 'tariff'
+
+    def lookups(self, request, model_admin):
+        tariffs = Tariff.objects.order_by('price', 'name')
+        return (
+            (str(tariff.pk), self._get_tariff_label(tariff))
+            for tariff in tariffs
+        )
+
+    def queryset(self, request, queryset):
+        tariff_id = self.value()
+        if not tariff_id:
+            return queryset
+
+        tariff = Tariff.objects.filter(pk=tariff_id).first()
+        if not tariff:
+            return queryset
+
+        amounts = {tariff.price}
+        if tariff.special_price is not None:
+            amounts.add(tariff.special_price)
+
+        return queryset.filter(amount__in=amounts)
+
+    @staticmethod
+    def _get_tariff_label(tariff):
+        if tariff.special_price is not None:
+            return f'{tariff.name}: {tariff.special_price} (обычная {tariff.price})'
+        return f'{tariff.name}: {tariff.price}'
 
 
 @admin.register(Transaction)
 class TransactionAdmin(admin.ModelAdmin):
-    list_display = ['user', 'amount', 'currency', 'status', 'order_id', 'created_at']
-    search_fields = ['user__username', 'amount', 'order_id', 'created_at']
-    list_filter = ('status', 'created_at', 'user')
+    change_list_template = 'admin/presentation/transaction/change_list.html'
+    list_display = ['user', 'amount', 'currency', 'status', 'tariff_by_amount', 'order_id', 'created_at']
+    search_fields = ['user__username', 'user__email', 'amount', 'order_id', 'created_at']
+    list_filter = ('status', TariffAmountListFilter, 'created_at')
+    date_hierarchy = 'created_at'
+    ordering = ('-created_at',)
+
+    @admin.display(description='Тариф по стоимости')
+    def tariff_by_amount(self, obj):
+        tariff = Tariff.objects.filter(price=obj.amount).first()
+        if not tariff:
+            tariff = Tariff.objects.filter(special_price=obj.amount).first()
+        return tariff.name if tariff else '-'
+
+    def changelist_view(self, request, extra_context=None):
+        response = super().changelist_view(request, extra_context=extra_context)
+
+        try:
+            queryset = response.context_data['cl'].queryset
+        except (AttributeError, KeyError):
+            return response
+
+        summary = queryset.aggregate(
+            average_amount=Avg('amount'),
+            total_amount=Sum('amount'),
+            transactions_count=Count('uuid'),
+        )
+        response.context_data['transaction_summary'] = {
+            'average_amount': summary['average_amount'],
+            'total_amount': summary['total_amount'],
+            'transactions_count': summary['transactions_count'],
+        }
+        return response
+
+    class Media:
+        css = {
+            'all': ('presentation/admin/user_presentations_inline.css',)
+        }
 
 
 @admin.register(Scope)
