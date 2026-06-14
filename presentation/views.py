@@ -1308,6 +1308,7 @@ class UpdateBalanceAPIView(APIView):
 
 
 class PromoCodeApplyAPIView(APIView):
+    authentication_classes = (JWTAuthentication,)
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(request_body=PromoCodeApplySerializer)
