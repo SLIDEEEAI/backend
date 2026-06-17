@@ -173,6 +173,10 @@ class Presentation(models.Model):
         self.save(update_fields=update_fields)
         return self.removed
 
+    def rename_project(self, new_name : str):
+        self.title = new_name
+        self.save(update_fields=['title'])
+
     def __str__(self):
         return f"Presentation ({self.id}) {self.user}"
 

@@ -44,7 +44,7 @@ from .views import (
     GetUserReferralsView,
     UpdateUserInfo,
     ResetUserAvatar, RoleAPIView, CreateNewEmptyProjectForGenerating,
-    RegeneratePresentationShareLinkView
+    RegeneratePresentationShareLinkView, RenameProjectView
 )
 
 from rest_framework_simplejwt.views import (
@@ -67,18 +67,16 @@ urlpatterns = [
     path('users/login/refresh', TokenRefreshView.as_view()),
     path("presentation/themes/generate", GenerateThemesView.as_view()),
     path("presentation/slides/generate", GenerateSlidesView.as_view()),
-
     path("presentation/list", GetAllPresentationView.as_view()),
     path("presentation/<int:id>/", PresentationView.as_view()),
     path("presentation/save", SavePresentationView.as_view()),
+    path("presentation/rename", RenameProjectView.as_view()),
     path("presentation/toggle-flag", TogglePresentationFlagView.as_view()),
     path("presentation/<int:id>/share-link/regenerate", RegeneratePresentationShareLinkView.as_view()),
     path("presentation/shared/<uuid:share_link_uid>/", GetPresentationSharedView.as_view()),
     path("presentation/export", ExportPresentationView.as_view()),
     path("presentation/getbalance", GetUserBalanceView.as_view()),
 
-    # Новые URL
-    path("presentation/short_text/generate", GenerateShortTextView.as_view()),
     path("presentation/long_text/generate", GenerateLongTextView.as_view()),
     path("presentation/bullet_points/generate", GenerateBulletPointsView.as_view()),
     path("presentation/image_with_caption/generate", GenerateImageWithCaptionView.as_view()),
@@ -95,8 +93,6 @@ urlpatterns = [
 
     path('generate/text', GenerateTextApiView.TextGenerationAPIView.as_view()),
     path('generate/image', GenerateImagesAPIView.ImageGenerationAPIView.as_view()),
-
-    # Новый URL для обработки Paykeeper
 
     path('presentation/decrement', DecrementPresentationView.as_view()),
     # Новый URL для обработки Paykeeper

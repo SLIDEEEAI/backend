@@ -47,6 +47,7 @@ from .serializers import (
     VerifyEmailSerializer,
     RoleSerializer,
     TogglePresentationFlagSerializer,
+    RenameProjectSerializer,
 
 )
 from .service_modules.balance_service import BalanceService
@@ -846,6 +847,36 @@ class SavePresentationView(APIView):
         return Response(
             data="Presentation not found!",
             status=400
+        )
+
+class RenameProjectView(APIView):
+    authentication_classes = (JWTAuthentication, )
+    permission_classes = (IsAuthenticated, )
+
+    def patch(self, request):
+        serializer = RenameProjectSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        presentation = Presentation.objects.filter(
+            id=serializer.validated_data['id'],
+            user=request.user,
+        ).first()
+        if not presentation:
+            return Response(
+                data='Presentation not found!',
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        new_name = serializer.validated_data['new_name']
+        presentation.rename_project(new_name)
+
+        return Response(
+            {
+                'id': presentation.id,
+                'new_name': presentation.title,
+            },
+            status=status.HTTP_200_OK,
         )
 
 

@@ -230,6 +230,10 @@ class GetPresentationSerializer(serializers.Serializer):
         return validated_data
 
 
+class RenameProjectSerializer(serializers.Serializer):
+    id = serializers.IntegerField(required=True)
+    new_name = serializers.CharField(required=True)
+
 class TogglePresentationFlagSerializer(serializers.Serializer):
     id = serializers.IntegerField(required=True)
     field = serializers.ChoiceField(choices=['favourite', 'removed'], required=True)
