@@ -80,6 +80,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    last_seen_at = models.DateTimeField(blank=True, null=True)
     balance = models.OneToOneField(Balance, on_delete=models.DO_NOTHING, related_name='user_balance', null=True, blank=True)
     presentation = models.IntegerField(default=0)
     referrer = models.ForeignKey(

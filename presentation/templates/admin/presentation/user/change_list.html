@@ -1,0 +1,17 @@
+{% extends "admin/change_list.html" %}
+
+{% block result_list %}
+    <div class="online-users-summary" style="text-align: right;">
+        <div class="online-users-summary-wrap" style="
+            display: inline-block;
+            background-color: var(--object-tools-bg);
+            padding: 10px;
+            border-radius: 20px;
+        ">
+            <strong>Пользователей онлайн:</strong>
+            {{ online_users_count|default:"0" }}
+            за последние {{ online_users_window_minutes }} мин.
+        </div>
+    </div>
+    {{ block.super }}
+{% endblock %}

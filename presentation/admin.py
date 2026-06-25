@@ -1,4 +1,5 @@
 import json
+from datetime import timedelta
 
 from django.contrib import admin
 from django.db.models import Avg, Count, Sum
@@ -11,6 +12,8 @@ from .models import Roles, User, Presentation, Transaction, Tariff, BalanceHisto
 admin.site.register([
     Roles
 ])
+
+ONLINE_USERS_WINDOW = timedelta(minutes=2)
 
 
 class UserPresentationInline(admin.TabularInline):
@@ -34,11 +37,14 @@ class UserPresentationInline(admin.TabularInline):
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
-    list_display = ('id', 'email', 'username', 'email_verified', 'tariff', 'last_login', 'created_at')
+    change_list_template = 'admin/presentation/user/change_list.html'
+    list_display = ('id', 'email', 'username', 'email_verified', 'tariff', 'online_status', 'last_seen_at', 'last_login', 'created_at')
     search_fields = ('id', 'email', 'username')
-    list_filter = ('email_verified', 'tariff', 'last_login')
+    list_filter = ('email_verified', 'tariff', 'last_seen_at', 'last_login')
     readonly_fields = (
+        'online_indicator',
         'last_login',
+        'last_seen_at',
         'created_at',
         'updated_at',
         'payment_history',
@@ -46,6 +52,41 @@ class UserAdmin(admin.ModelAdmin):
         'referral_history',
     )
     inlines = (UserPresentationInline,)
+
+    @admin.display(description='Онлайн', boolean=True)
+    def online_status(self, obj):
+        return bool(obj.last_seen_at and obj.last_seen_at >= self._online_threshold())
+
+    @admin.display(description='Статус онлайн')
+    def online_indicator(self, obj):
+        if not obj:
+            return '-'
+
+        is_online = self.online_status(obj)
+        color = '#2e7d32' if is_online else '#ba2121'
+        label = 'Онлайн' if is_online else 'Офлайн'
+        last_seen = self._format_datetime(obj.last_seen_at)
+
+        return format_html(
+            '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;'
+            'background:{};margin-right:6px;"></span>'
+            '<strong>{}</strong> <span style="color:#666;">(последняя активность: {})</span>',
+            color,
+            label,
+            last_seen,
+        )
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context['online_users_count'] = User.objects.filter(
+            last_seen_at__gte=self._online_threshold()
+        ).count()
+        extra_context['online_users_window_minutes'] = int(ONLINE_USERS_WINDOW.total_seconds() // 60)
+        return super().changelist_view(request, extra_context=extra_context)
+
+    @staticmethod
+    def _online_threshold():
+        return timezone.now() - ONLINE_USERS_WINDOW
 
     @admin.display(description='История платежей')
     def payment_history(self, obj):

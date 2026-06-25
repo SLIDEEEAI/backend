@@ -10,7 +10,7 @@ from django.db.transaction import atomic
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework_simplejwt.authentication import JWTAuthentication
+from .authentication import JWTAuthentication
 from rest_framework.views import APIView
 from django.contrib.auth import authenticate, login
 from rest_framework_simplejwt.views import TokenObtainPairView
