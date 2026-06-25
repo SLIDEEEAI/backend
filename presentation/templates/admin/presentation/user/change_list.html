@@ -3,15 +3,66 @@
 {% block result_list %}
     <div class="online-users-summary" style="text-align: right;">
         <div class="online-users-summary-wrap" style="
+            position: relative;
             display: inline-block;
             background-color: var(--object-tools-bg);
             padding: 10px;
             border-radius: 20px;
         ">
             <strong>Пользователей онлайн:</strong>
-            {{ online_users_count|default:"0" }}
+            <span id="online-users-count">{{ online_users_count|default:"0" }}</span>
             за последние {{ online_users_window_minutes }} мин.
+            <button
+                type="button"
+                class="button"
+                id="refresh-online-users-count"
+                data-url="{{ online_users_count_url }}"
+                style="margin-left: 8px;"
+            >
+                Обновить
+            </button>
+            <span id="online-users-refresh-status" style="
+                position: absolute;
+                color: var(--body-quiet-color);
+                right: 0;
+                bottom: 0;
+                translate: 0 100%;
+            "></span>
         </div>
     </div>
+    <script>
+        (function () {
+            const button = document.getElementById('refresh-online-users-count');
+            const counter = document.getElementById('online-users-count');
+            const status = document.getElementById('online-users-refresh-status');
+
+            if (!button || !counter || !status) {
+                return;
+            }
+
+            button.addEventListener('click', async function () {
+                button.disabled = true;
+                status.textContent = 'Обновляем...';
+
+                try {
+                    const response = await fetch(button.dataset.url, {
+                        headers: {'X-Requested-With': 'XMLHttpRequest'},
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Не удалось обновить счетчик');
+                    }
+
+                    const data = await response.json();
+                    counter.textContent = data.online_users_count;
+                    status.textContent = 'Обновлено';
+                } catch (error) {
+                    status.textContent = 'Ошибка обновления';
+                } finally {
+                    button.disabled = false;
+                }
+            });
+        })();
+    </script>
     {{ block.super }}
 {% endblock %}

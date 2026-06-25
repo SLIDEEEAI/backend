@@ -2,7 +2,10 @@ import json
 from datetime import timedelta
 
 from django.contrib import admin
+from django.core.exceptions import PermissionDenied
 from django.db.models import Avg, Count, Sum
+from django.http import JsonResponse
+from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 
@@ -76,17 +79,43 @@ class UserAdmin(admin.ModelAdmin):
             last_seen,
         )
 
+    def get_urls(self):
+        custom_urls = [
+            path(
+                'online-users-count/',
+                self.admin_site.admin_view(self.online_users_count_view),
+                name='presentation_user_online_users_count',
+            ),
+        ]
+        return custom_urls + super().get_urls()
+
+    def online_users_count_view(self, request):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+
+        return JsonResponse({
+            'online_users_count': self._get_online_users_count(),
+            'online_users_window_minutes': self._online_window_minutes(),
+        })
+
     def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}
-        extra_context['online_users_count'] = User.objects.filter(
-            last_seen_at__gte=self._online_threshold()
-        ).count()
-        extra_context['online_users_window_minutes'] = int(ONLINE_USERS_WINDOW.total_seconds() // 60)
+        extra_context['online_users_count'] = self._get_online_users_count()
+        extra_context['online_users_window_minutes'] = self._online_window_minutes()
+        extra_context['online_users_count_url'] = reverse('admin:presentation_user_online_users_count')
         return super().changelist_view(request, extra_context=extra_context)
 
     @staticmethod
     def _online_threshold():
         return timezone.now() - ONLINE_USERS_WINDOW
+
+    @classmethod
+    def _get_online_users_count(cls):
+        return User.objects.filter(last_seen_at__gte=cls._online_threshold()).count()
+
+    @staticmethod
+    def _online_window_minutes():
+        return int(ONLINE_USERS_WINDOW.total_seconds() // 60)
 
     @admin.display(description='История платежей')
     def payment_history(self, obj):
