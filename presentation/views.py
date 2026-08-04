@@ -611,7 +611,7 @@ class ChangePasswordView(APIView):
         return Response(status=status.HTTP_200_OK)
 
 
-class GenerateThemesView(APIView):
+class GeneratePresentationPlanView(APIView):
     """
     API эндпоинт для генерации тем слайдов с шаблонами.
     Доступен только авторизованным пользователям через JWT токен.

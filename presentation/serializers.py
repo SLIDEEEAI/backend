@@ -140,8 +140,7 @@ class GenerateThemesSerializer(serializers.Serializer):
         write_only=True,  # Поле используется только на входе
         required=True  # Обязательное поле
     )
-    # Поле для вывода - список слайдов (только для чтения)
-    # Теперь каждый слайд - объект с text и templateName
+    # Поле для вывода - список слайдов с ролью, шаблоном и тезисами
     themes = serializers.ListField(
         read_only=True  # Поле только для чтения, не принимается на входе
     )
@@ -166,7 +165,7 @@ class GenerateThemesSerializer(serializers.Serializer):
         # Возвращаем проверенные данные
         return attrs
 
-    def create(self, validated_data: Dict[str, Any]) -> Dict[str, List[Dict[str, str]]]:
+    def create(self, validated_data: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
         """
         Генерация слайдов на основе валидированных данных.
         Args:
@@ -178,8 +177,7 @@ class GenerateThemesSerializer(serializers.Serializer):
         theme = validated_data["theme"]
         # Извлекаем количество слайдов
         slides_count = validated_data["slides_count"]
-        # Генерируем слайды с помощью обновленной функции
-        # Теперь themes - это генератор, выдающий словари {text, templateName}
+        # Генерируем слайды с расширенными метаданными
         themes_generator = generate_slides_with_templates(theme, slides_count)
         # Преобразуем генератор в список (массив объектов)
         themes = list(themes_generator)

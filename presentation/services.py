@@ -1,5 +1,7 @@
 import sys
 import json
+import hashlib
+import re
 import traceback
 import uuid
 
@@ -194,7 +196,7 @@ def generate_images2(presentation_theme, num_images):
 
 
 
-def generate_slides_with_templates(presentation_theme: str, slides_count: int) -> Generator[Dict[str, str], None, None]:
+def generate_slides_with_templates(presentation_theme: str, slides_count: int) -> Generator[Dict[str, Any], None, None]:
     """
     Генерирует слайды с заголовками и рекомендованными шаблонами.
 
@@ -203,7 +205,8 @@ def generate_slides_with_templates(presentation_theme: str, slides_count: int) -
         slides_count: Количество слайдов (1-20)
 
     Yields:
-        Словарь с ключами 'text' (заголовок) и 'templateName' (имя шаблона)
+        Словарь с метаданными слайда: id, text, templateName, purpose,
+        contentHints, а при необходимости groupId и continuationOf.
     """
 
     # Формируем описание доступных шаблонов для нейросети
@@ -222,6 +225,7 @@ def generate_slides_with_templates(presentation_theme: str, slides_count: int) -
     - threeListItemsWithTitlesAndTwoPicturesReverse: 2 маленькие картинки и список из трёх параграфов с подписью (развернутый)
     - fourListItemsWithTitlesAndBottomPicture: Список из 4 элементов и картинкой внизу
     - smallTextWithThreeListItems: Заголовок с текстом и списком из 3 элементов
+    - endingSlide: Финальный слайд с выводами
     """
 
     # Формируем запрос к нейросети с требованием вернуть JSON
@@ -230,8 +234,14 @@ def generate_slides_with_templates(presentation_theme: str, slides_count: int) -
     Нужно сгенерировать {slides_count} слайдов.
 
     Для каждого слайда придумай:
-    1. Заголовок (короткий, 5-10 слов, на русском языке)
-    2. Подходящий шаблон из списка ниже, который лучше всего подходит для содержания этого заголовка
+    1. Уникальный стабильный id в kebab-case латиницей
+    2. Заголовок (короткий, 5-10 слов, на русском языке)
+    3. Подходящий шаблон из списка ниже
+    4. Назначение purpose: introduction, explanation, list, comparison,
+       visual, summary или conclusion
+    5. Массив contentHints из 2-4 конкретных тезисов, раскрываемых только на этом слайде
+    6. groupId для тематически связанных слайдов
+    7. continuationOf с id предыдущего слайда, только если текущий продолжает его тему
 
     {templates_description}
 
@@ -242,12 +252,33 @@ def generate_slides_with_templates(presentation_theme: str, slides_count: int) -
     - Для инструкций/процессов используй threeListItemsWithTitlesAndTwoPictures
     - Для ключевых метрик используй smallTextWithThreeListItems
     - Для кейсов/примеров используй textWithPictureFW
-    
+    - Для заключительного слайда можно использовать endingSlide
+    - Никогда не используй шаблоны, начинающиеся с titleSlide
+    - Самостоятельно назначай purpose по смысловой роли слайда
+    - Распредели contentHints между слайдами без повторения тезисов
+    - Все id должны быть уникальными
+    - continuationOf может ссылаться только на id более раннего слайда
+    - groupId и continuationOf не обязательны, не добавляй их без необходимости
 
     Ответ должен быть ТОЛЬКО в формате JSON массива:
     [
-        {{"text": "Заголовок слайда 1", "templateName": "common"}},
-        {{"text": "Заголовок слайда 2", "templateName": "textFW"}}
+        {{
+            "id": "topic-introduction",
+            "text": "Заголовок слайда 1",
+            "templateName": "common",
+            "purpose": "introduction",
+            "contentHints": ["Первый тезис", "Второй тезис"],
+            "groupId": "topic-overview"
+        }},
+        {{
+            "id": "topic-details",
+            "text": "Заголовок слайда 2",
+            "templateName": "smallTextWithThreeListItems",
+            "purpose": "list",
+            "contentHints": ["Третий тезис", "Четвёртый тезис"],
+            "groupId": "topic-overview",
+            "continuationOf": "topic-introduction"
+        }}
     ]
 
     Не добавляй никаких пояснений, только JSON массив.
@@ -258,9 +289,8 @@ def generate_slides_with_templates(presentation_theme: str, slides_count: int) -
 
     # Проверяем, что получили ответ
     if not content:
-        # Если ошибка - возвращаем заглушку с дефолтным шаблоном
         for i in range(slides_count):
-            yield {"text": f"Слайд {i + 1}", "templateName": "textFW"}
+            yield _fallback_theme_slide(i, slides_count)
         return
 
     # Парсим JSON ответ от нейросети
@@ -282,57 +312,129 @@ def generate_slides_with_templates(presentation_theme: str, slides_count: int) -
         if not isinstance(slides_data, list):
             raise ValueError("Ответ не является списком")
 
-        # Возвращаем первые slides_count слайдов
-        for slide in slides_data[:slides_count]:
-            # Валидация полей
-            if not isinstance(slide, dict):
-                continue
-            text = slide.get("text", "").strip()
-            template = slide.get("templateName", "common")
-
-            # Проверка, что шаблон существует в нашем списке
-            valid_templates = [
-                "common", "commonReverse", "textFW", "pictureFW",
-                "textWithPictureFW", "twoPicturesWithCaption",
-                "twoPicturesWithCaptionAndText", "twoPicturesWithCaptionAndLargeText",
-                "threePicturesWithCaptionAndText", "threeListItemsWithTitlesAndTwoPictures",
-                "threeListItemsWithTitlesAndTwoPicturesReverse",
-                "fourListItemsWithTitlesAndBottomPicture", "smallTextWithThreeListItems"
-            ]
-
-            if template not in valid_templates:
-                template = "common"  # Дефолтный шаблон
-
-            if text:
-                yield {"text": text, "templateName": template}
-            else:
-                yield {"text": "Без названия", "templateName": template}
+        normalized_slides = _normalize_theme_slides(slides_data, slides_count)
+        yield from normalized_slides
 
     except (json.JSONDecodeError, ValueError, AttributeError) as e:
-        # Если JSON некорректен, пробуем старый метод парсинга построчно
         print(f"Ошибка парсинга JSON: {e}, пробуем fallback метод")
-
-        # Fallback: ищем строки с заголовками и назначаем им шаблоны по умолчанию
         lines = findall(r"[^\W]\w+.*", content)
-        for i, line in enumerate(lines[:slides_count]):
-            # Простой алгоритм выбора шаблона на основе ключевых слов
-            text = line.strip()
-            template = "common"  # По умолчанию
+        fallback_data = [{"text": line.strip()} for line in lines[:slides_count]]
+        yield from _normalize_theme_slides(fallback_data, slides_count)
 
-            if any(word in text.lower() for word in ["введение", "вступление", "цель", "задача"]):
-                template = "textFW"
-            elif any(word in text.lower() for word in ["итог", "вывод", "заключение", "результат"]):
-                template = "textFW"
-            elif any(word in text.lower() for word in ["данные", "статистика", "график", "показатель"]):
-                template = "pictureFW"
-            elif any(word in text.lower() for word in ["сравнение", "vs", "противопоставление"]):
-                template = "twoPicturesWithCaption"
-            elif any(word in text.lower() for word in ["шаг", "этап", "процесс", "алгоритм"]):
-                template = "threeListItemsWithTitlesAndTwoPictures"
-            elif any(word in text.lower() for word in ["пример", "кейс", "ситуация", "случай"]):
-                template = "textWithPictureFW"
 
-            yield {"text": text, "templateName": template}
+THEME_TEMPLATES = {
+    "common", "commonReverse", "textFW", "pictureFW", "textWithPictureFW",
+    "twoPicturesWithCaption", "twoPicturesWithCaptionAndText",
+    "twoPicturesWithCaptionAndLargeText", "threePicturesWithCaptionAndText",
+    "threeListItemsWithTitlesAndTwoPictures",
+    "threeListItemsWithTitlesAndTwoPicturesReverse",
+    "fourListItemsWithTitlesAndBottomPicture", "smallTextWithThreeListItems",
+    "endingSlide",
+}
+
+THEME_PURPOSES = {
+    "introduction", "explanation", "list", "comparison",
+    "visual", "summary", "conclusion",
+}
+
+
+def _normalize_identifier(value: Any, fallback: str) -> str:
+    identifier = re.sub(r"[^a-z0-9]+", "-", str(value or "").strip().lower())
+    return identifier.strip("-") or fallback
+
+
+def _stable_slide_id(text: str, index: int) -> str:
+    digest = hashlib.sha1(text.encode("utf-8")).hexdigest()[:8]
+    return f"slide-{index + 1}-{digest}"
+
+
+def _infer_slide_purpose(text: str, index: int, slides_count: int) -> str:
+    lowered = text.lower()
+    if index == 0 or any(word in lowered for word in ("введение", "вступление")):
+        return "introduction"
+    if index == slides_count - 1 or any(
+        word in lowered for word in ("итог", "вывод", "заключение")
+    ):
+        return "conclusion"
+    if any(word in lowered for word in ("сравнение", " против ", " vs ")):
+        return "comparison"
+    if any(word in lowered for word in ("список", "причин", "этап", "шаг")):
+        return "list"
+    if any(word in lowered for word in ("график", "диаграмм", "визуал", "схем")):
+        return "visual"
+    if any(word in lowered for word in ("обзор", "резюме")):
+        return "summary"
+    return "explanation"
+
+
+def _fallback_theme_slide(index: int, slides_count: int) -> Dict[str, Any]:
+    text = f"Слайд {index + 1}"
+    purpose = _infer_slide_purpose(text, index, slides_count)
+    return {
+        "id": _stable_slide_id(text, index),
+        "text": text,
+        "templateName": "endingSlide" if purpose == "conclusion" else "textFW",
+        "purpose": purpose,
+        "contentHints": [],
+    }
+
+
+def _normalize_theme_slides(slides_data: list, slides_count: int) -> list:
+    result = []
+    used_ids = set()
+    used_hints = set()
+
+    for index in range(slides_count):
+        raw_slide = slides_data[index] if index < len(slides_data) else {}
+        if not isinstance(raw_slide, dict):
+            raw_slide = {}
+
+        text = str(raw_slide.get("text") or f"Слайд {index + 1}").strip()
+        fallback_id = _stable_slide_id(text, index)
+        slide_id = _normalize_identifier(raw_slide.get("id"), fallback_id)
+        if slide_id in used_ids:
+            slide_id = f"{slide_id}-{index + 1}"
+        used_ids.add(slide_id)
+
+        template = raw_slide.get("templateName", "common")
+        if template not in THEME_TEMPLATES or str(template).startswith("titleSlide"):
+            template = "common"
+
+        purpose = raw_slide.get("purpose")
+        if purpose not in THEME_PURPOSES:
+            purpose = _infer_slide_purpose(text, index, slides_count)
+
+        hints = []
+        raw_hints = raw_slide.get("contentHints", [])
+        if isinstance(raw_hints, list):
+            for hint in raw_hints:
+                hint = str(hint).strip()
+                hint_key = hint.casefold()
+                if hint and hint_key not in used_hints:
+                    hints.append(hint)
+                    used_hints.add(hint_key)
+
+        slide = {
+            "id": slide_id,
+            "text": text,
+            "templateName": template,
+            "purpose": purpose,
+            "contentHints": hints,
+        }
+
+        group_id = raw_slide.get("groupId")
+        if group_id:
+            slide["groupId"] = _normalize_identifier(group_id, f"group-{index + 1}")
+
+        continuation_of = _normalize_identifier(
+            raw_slide.get("continuationOf"), ""
+        )
+        if continuation_of in used_ids and continuation_of != slide_id:
+            slide["continuationOf"] = continuation_of
+
+        result.append(slide)
+
+    return result
 
 
 def generate_slides_text(slides_themes: list) -> list[str | None]:
