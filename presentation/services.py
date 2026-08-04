@@ -6,7 +6,7 @@ import uuid
 from json import dumps
 from re import findall
 from io import BytesIO
-from typing import Generator, Dict
+from typing import Any, Generator, Dict
 
 from django.conf import settings
 from django.core.files.base import File, ContentFile
@@ -46,30 +46,75 @@ def _generate_image(prompt, model="yandex-art", width_ratio=1, height_ratio=2, s
         print(traceback.format_exc())
 
 
-def chat_completion_create(system_content: str, temperature: float | None = 0.7) -> str | None:
+def chat_completion_create(
+    system_content: str | None = None,
+    user_content: str | None = None,
+    *,
+    messages: list[dict[str, str]] | None = None,
+    model: str = "deepseek-v4-flash",
+    temperature: float | None = 0.7,
+    max_tokens: int | None = None,
+    thinking_enabled: bool = True,
+    thinking_type: str = "enabled",
+    extra_body: dict[str, Any] | None = None,
+    request_options: dict[str, Any] | None = None,
+    return_full_response: bool = False,
+) -> str | ChatCompletion | None:
     """
-    Отправляет запрос к DeepSeek API и возвращает ответ.
+    Отправляет запрос к DeepSeek API (OpenAI-совместимый интерфейс) и возвращает ответ.
 
     Args:
-        system_content: Промпт для нейросети (системное сообщение)
-        temperature: Контролирует креативность (по-умолчанию 0.7 - баланс между точностью и креативностью)
+        system_content: Системный промпт (role=system)
+        user_content: Пользовательский промпт (role=user)
+        messages: Полный список сообщений в OpenAI-совместимом формате. Если передан, то system_content/user_content игнорируются.
+        model: Модель DeepSeek
+        temperature: Контролирует креативность (по-умолчанию 0.7)
+        max_tokens: Лимит выходных токенов
+        thinking_enabled: Включить/выключить режим thinking в DeepSeek
+        thinking_type: Тип thinking (обычно "enabled")
+        extra_body: Дополнительные параметры для DeepSeek. Будут объединены с thinking.
+        request_options: Любые дополнительные top-level параметры запроса к chat.completions.create
+        return_full_response: Вернуть сырой объект ChatCompletion вместо текста ответа
 
     Returns:
-        Текст ответа нейросети или None при ошибке
+        Текст ответа нейросети, объект ChatCompletion или None при пустом списке сообщений
     """
 
-    # Отправляем запрос к API DeepSeek через OpenAI-совместимый клиент
-    # settings.OPENAI_CLIENT - это предварительно настроенный клиент с API-ключом
+    if messages is None:
+        messages = []
+        if system_content:
+            messages.append({"role": "system", "content": system_content})
+        if user_content:
+            messages.append({"role": "user", "content": user_content})
+
+    if not messages:
+        return None
+
+    request_extra_body = dict(extra_body or {})
+    if thinking_enabled:
+        request_extra_body["thinking"] = {"type": thinking_type}
+
+    request_payload: dict[str, Any] = {
+        "messages": messages,
+        "model": model,
+    }
+    if temperature is not None:
+        request_payload["temperature"] = temperature
+    if max_tokens is not None:
+        request_payload["max_tokens"] = max_tokens
+    if request_extra_body:
+        request_payload["extra_body"] = request_extra_body
+    if request_options:
+        request_payload.update(request_options)
+
+    # Отправляем запрос к API DeepSeek через OpenAI-совместимый клиент.
+    # settings.OPENAI_CLIENT - это предварительно настроенный клиент с API-ключом.
     chat_completion: ChatCompletion = settings.OPENAI_CLIENT.chat.completions.create(
-        messages=[
-            {
-                "role": "system",  # Системное сообщение - задает поведение нейросети
-                "content": system_content,  # Наш промпт с инструкцией
-            }
-        ],
-        model="deepseek-chat",
-        temperature=temperature
+        **request_payload
     )
+
+    if return_full_response:
+        return chat_completion
 
     # Проверяем, есть ли ответ от нейросети
     if chat_completion.choices:
@@ -147,19 +192,6 @@ def generate_images2(presentation_theme, num_images):
         print(f"Error generating images: {e}")
         return []
 
-# common - Рисунок с текстом
-# commonReverse - Рисунок с текстом (развернутый)
-# textFW - Текст во всю длину
-# pictureFW - Картинка во всю длину
-# textWithPictureFW - Текст с картинкой во всю длину
-# twoPicturesWithCaption - 2 картинки с подписью
-# twoPicturesWithCaptionAndText - 2 картинки с подписью и текстом
-# twoPicturesWithCaptionAndLargeText - 2 маленькие картинки с подписью и текстом
-# threePicturesWithCaptionAndText - 3 картинки с подписью
-# threeListItemsWithTitlesAndTwoPictures - 2 маленькие картинки и список из трёх параграфов с подписью
-# threeListItemsWithTitlesAndTwoPicturesReverse - 2 маленькие картинки и список из трёх параграфов с подписью
-# fourListItemsWithTitlesAndBottomPicture - Список из 4 элементов списка и картинкой внизу
-# smallTextWithThreeListItems - Заголовок с текстом и списком из 3 элементов
 
 
 def generate_slides_with_templates(presentation_theme: str, slides_count: int) -> Generator[Dict[str, str], None, None]:
@@ -222,7 +254,7 @@ def generate_slides_with_templates(presentation_theme: str, slides_count: int) -
     """
 
     # Отправляем запрос к нейросети
-    content = chat_completion_create(system_prompt)
+    content = chat_completion_create(system_content=system_prompt)
 
     # Проверяем, что получили ответ
     if not content:
@@ -305,7 +337,9 @@ def generate_slides_with_templates(presentation_theme: str, slides_count: int) -
 
 def generate_slides_text(slides_themes: list) -> list[str | None]:
     system_content = "You should write several sentences on each specified topic in Russian - {0}. Sentences should not exceed 500 words and each should contain a complete thought. You can also choose not to add words from yourself, briefly and only on the topic! Your complete answer should contain exactly - {1} sentences. The topics themselves should not appear in your answer!"
-    content = chat_completion_create(system_content.format(", ".join(slides_themes), len(slides_themes)))
+    content = chat_completion_create(
+        system_content=system_content.format(", ".join(slides_themes), len(slides_themes))
+    )
     if content:
         for x in findall(r"\w+.*", content)[:len(slides_themes)]:
             yield x
@@ -315,15 +349,18 @@ def generate_slides_text(slides_themes: list) -> list[str | None]:
 
 
 def generate_custom_request(prompt: str, max_tokens: int = 500) -> str:
-    messages = [
-        {"role": "user", "content": prompt}
-    ]
-    response = settings.OPENAI_CLIENT.chat.completions.create(
-        model="deepseek-chat",
-        messages=messages,
-        max_tokens=max_tokens,
-    )
-    return response.choices[0].message.content.strip()
+    # messages = [
+    #     {"role": "user", "content": prompt}
+    # ]
+    # response = settings.OPENAI_CLIENT.chat.completions.create(
+    #     model="deepseek-v4-pro",
+    #     messages=messages,
+    #     max_tokens=max_tokens,
+    # )
+    # return response.choices[0].message.content.strip()
+
+    content = chat_completion_create(system_content=prompt)
+    return content
 
 
 def generate_short_text(presentation_theme: str, max_tokens: int = 50) -> str:
@@ -333,7 +370,7 @@ def generate_short_text(presentation_theme: str, max_tokens: int = 50) -> str:
         {"role": "user", "content": f"Напишите короткое введение или краткое описание для темы презентации: {presentation_theme}. Ограничьте свой ответ {max_tokens} токенами."}
     ]
     response = settings.OPENAI_CLIENT.chat.completions.create(
-        model="deepseek-chat",
+        model="deepseek-v4-flash",
         messages=messages,
         max_tokens=max_tokens,
     )
@@ -347,7 +384,7 @@ def generate_long_text(presentation_theme: str, max_tokens: int = 50) -> str:
         {"role": "user", "content": f"Напишите про {presentation_theme}. Пиши только текст, не надо дополнительных вводных. Мне надо это будет скопировать на слайд. Не пиши название самой темы. Ваш ответ не должен превышать {max_tokens} токенов."}
     ]
     response = settings.OPENAI_CLIENT.chat.completions.create(
-        model="deepseek-chat",
+        model="deepseek-v4-flash",
         messages=messages,
         max_tokens=max_tokens,
     )
@@ -362,7 +399,7 @@ def generate_bullet_points(presentation_theme: str, max_items: int = 5) -> list[
         {"role": "user", "content": f"Напишите функции и виды по {max_items} пунктов, связанных с темой презентации: {presentation_theme}."}
     ]
     response = settings.OPENAI_CLIENT.chat.completions.create(
-        model="deepseek-chat",
+        model="deepseek-v4-flash",
         messages=messages,
         max_tokens=100,  # Предположим, что каждый пункт составляет около 20 токенов
     )
@@ -389,7 +426,7 @@ def generate_quote(presentation_theme: str) -> str:
         {"role": "user", "content": f"Напишите цитату или высказывание, связанные с темой презентации: {presentation_theme}."}
     ]
     response = settings.OPENAI_CLIENT.chat.completions.create(
-        model="deepseek-chat",
+        model="deepseek-v4-flash",
         messages=messages,
         max_tokens=50,  # цитата короткая - 100 слов
     )
@@ -404,7 +441,7 @@ def generate_chart_data(presentation_theme: str) -> str:
         {"role": "user", "content": f"Сгенерируйте данные для создания графиков или диаграмм, связанных с темой презентации: {presentation_theme}."}
     ]
     response = settings.OPENAI_CLIENT.chat.completions.create(
-        model="deepseek-chat",
+        model="deepseek-v4-flash",
         messages=messages,
         max_tokens=100,  # Предположим, что короткий ответ на данные для графика
     )
@@ -417,7 +454,7 @@ def generate_questions(presentation_theme: str, max_questions: int = 3) -> list[
         {"role": "user", "content": f"Сгенерируйте {max_questions} вопроса, связанных с темой презентации: {presentation_theme}."}
     ]
     response = settings.OPENAI_CLIENT.chat.completions.create(
-        model="deepseek-chat",
+        model="deepseek-v4-flash",
         messages=messages,
         max_tokens=150,  # Предположим, что каждый вопрос около 50 токенов
     )
@@ -431,7 +468,7 @@ def generate_slide_title(presentation_theme: str) -> str:
         {"role": "user", "content": f"Сгенерируйте заголовок слайда, который четко описывает содержание, связанное с темой презентации: {presentation_theme}."}
     ]
     response = settings.OPENAI_CLIENT.chat.completions.create(
-        model="deepseek-chat",
+        model="deepseek-v4-flash",
         messages=messages,
         max_tokens=20,  # Предположим, что заголовок короткий
     )
@@ -444,7 +481,7 @@ def generate_slide_heading(presentation_theme: str) -> str:
         {"role": "user", "content": f"Сгенерируйте заголовок раздела презентации, который поможет структурировать ее содержание, связанное с темой: {presentation_theme}."}
     ]
     response = settings.OPENAI_CLIENT.chat.completions.create(
-        model="deepseek-chat",
+        model="deepseek-v4-flash",
         messages=messages,
         max_tokens=30,  # Предположим, что заголовок немного длиннее
     )

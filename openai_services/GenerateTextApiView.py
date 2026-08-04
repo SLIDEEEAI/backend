@@ -24,9 +24,9 @@ class TextGenerationAPIView(APIView):
         if not user_prompt:
             return Response({'error': 'Field "user_prompt" is required'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            response = ContentGenerationService.text_generation(request)
+            content = ContentGenerationService.text_generation(request)
             # Возвращаем ответ API
-            return Response(response.choices[0].message.content, status=status.HTTP_200_OK)
+            return Response(content, status=status.HTTP_200_OK)
         except Exception as e:
             # Обработка ошибок
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -39,9 +39,9 @@ class SystemTextGenerationAPIView(APIView):
         if not user_prompt:
             return Response({'error': 'Field "user_prompt" is required'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            response = ContentGenerationService.text_generation(request)
+            content = ContentGenerationService.text_generation(request)
             # Возвращаем ответ API
-            return Response(response.choices[0].message.content, status=status.HTTP_200_OK)
+            return Response(content, status=status.HTTP_200_OK)
         except Exception as e:
             # Обработка ошибок
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)

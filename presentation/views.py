@@ -69,7 +69,7 @@ from .services import (
     generate_slide_heading,
     generate_custom_request,
     send_verification_email,
-    send_reset_password_email,
+    send_reset_password_email, chat_completion_create,
 )
 
 import base64
@@ -278,7 +278,9 @@ class GPTRequestView(APIView):
             # В данном случае просто возвращаем его обратно в ответе
 
             # gpt_response = f"Привет! Вы ввели запрос: '{gpt_request}' и отправили его на обработку GPT."
-            gpt_response = generate_custom_request(gpt_request)
+            # gpt_response = generate_custom_request(gpt_request)
+
+            gpt_response = chat_completion_create(system_content=gpt_request)
 
             # Возвращаем успешный ответ с результатом обработки
             return Response({"gpt_response": gpt_response}, status=status.HTTP_200_OK)

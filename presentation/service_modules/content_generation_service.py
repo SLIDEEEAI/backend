@@ -8,9 +8,9 @@ from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from rest_framework import status
 from rest_framework.response import Response
-from openai import OpenAI
 
 from presentation.models import GeneratedImage
+from presentation.services import chat_completion_create
 from source import settings
 
 logger = logging.getLogger(__name__)
@@ -29,34 +29,129 @@ class ContentGenerationService:
     @staticmethod
     def text_generation(request):
         # Получаем параметры из тела запроса
-        model = request.data.get('model', "deepseek-chat")
+        model = request.data.get('model', "deepseek-v4-flash")
 
         user_prompt = request.data.get('user_prompt')
         system_prompt = request.data.get('system_prompt', '')
 
-        max_tokens = request.data.get('max_tokens')
+        max_tokens = ContentGenerationService._to_int_or_none(request.data.get('max_tokens'))
+        temperature = ContentGenerationService._to_float_or_none(request.data.get('temperature'))
+        thinking_enabled = ContentGenerationService._to_bool(request.data.get('thinking_enabled'), default=False)
+        thinking_type = request.data.get('thinking_type', 'enabled')
         other_params = {k: v for k, v in request.data.items() if
-                        k not in ['model', 'user_prompt', 'system_prompt', 'max_tokens']}
+                        k not in [
+                            'model', 'user_prompt', 'system_prompt',
+                            'max_tokens', 'temperature',
+                            'thinking_enabled', 'thinking_type'
+                        ]}
 
         if not user_prompt:
             return Response({'error': 'Field "user_prompt" is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        messages = [
-            {"role": "system",
-             "content": system_prompt},
-            {"role": "user",
-             "content": user_prompt}
-        ]
+        messages = [{"role": "user", "content": user_prompt}]
+        if system_prompt:
+            messages.insert(0, {"role": "system", "content": system_prompt})
 
-        # Вызов API OpenAI с заданными параметрами
-        response = settings.OPENAI_CLIENT.chat.completions.create(
-            model=model,
+        # Используем общую обертку для единообразной работы с DeepSeek.
+        chat_completion = chat_completion_create(
             messages=messages,
+            model=model,
+            temperature=temperature,
             max_tokens=max_tokens,
-            **other_params
+            thinking_enabled=thinking_enabled,
+            thinking_type=thinking_type,
+            request_options=other_params,
+            return_full_response=True,
         )
 
-        return response
+        content = ContentGenerationService._extract_text_content(chat_completion)
+        finish_reason = ContentGenerationService._extract_finish_reason(chat_completion)
+
+        # Если ответ пустой или модель уперлась в лимит, делаем 1 безопасный повтор.
+        # Для пользовательского текста reasoning/thinking обычно не нужен и только съедает токены.
+        if (not content) or finish_reason == "length":
+            retry_max_tokens = ContentGenerationService._calc_retry_max_tokens(max_tokens)
+            if retry_max_tokens is not None and (max_tokens is None or retry_max_tokens > max_tokens):
+                chat_completion = chat_completion_create(
+                    messages=messages,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=retry_max_tokens,
+                    thinking_enabled=False,
+                    request_options=other_params,
+                    return_full_response=True,
+                )
+                retried_content = ContentGenerationService._extract_text_content(chat_completion)
+                if retried_content:
+                    return retried_content
+            elif not thinking_enabled:
+                # thinking уже выключен и увеличить лимит нельзя — вернем исходный контент.
+                pass
+            else:
+                chat_completion = chat_completion_create(
+                    messages=messages,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    thinking_enabled=False,
+                    request_options=other_params,
+                    return_full_response=True,
+                )
+                retried_content = ContentGenerationService._extract_text_content(chat_completion)
+                if retried_content:
+                    return retried_content
+
+        return content
+
+    @staticmethod
+    def _extract_text_content(chat_completion):
+        if not chat_completion or not getattr(chat_completion, 'choices', None):
+            return ''
+        message = chat_completion.choices[0].message
+        content = getattr(message, 'content', None)
+        return (content or '').strip()
+
+    @staticmethod
+    def _extract_finish_reason(chat_completion):
+        if not chat_completion or not getattr(chat_completion, 'choices', None):
+            return None
+        return getattr(chat_completion.choices[0], 'finish_reason', None)
+
+    @staticmethod
+    def _calc_retry_max_tokens(max_tokens):
+        if max_tokens is None:
+            return 700
+        if max_tokens < 450:
+            return min(max_tokens * 2, 900)
+        if max_tokens < 700:
+            return 700
+        return max_tokens
+
+    @staticmethod
+    def _to_bool(value, default=False):
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in {"1", "true", "yes", "on", "enabled"}
+
+    @staticmethod
+    def _to_int_or_none(value):
+        if value in (None, ''):
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _to_float_or_none(value):
+        if value in (None, ''):
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
 
     # --- НОВЫЙ МЕТОД ГЕНЕРАЦИИ ИЗОБРАЖЕНИЙ ---
     @staticmethod
