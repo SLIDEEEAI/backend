@@ -126,9 +126,9 @@ class ChangePasswordSerializer(serializers.Serializer):
         return instance
 
 
-class GenerateThemesSerializer(serializers.Serializer):
+class GeneratePresentationPlanSerializer(serializers.Serializer):
     """
-    Сериализатор для валидации и генерации тем слайдов.
+    Сериализатор для валидации и генерации плана слайдов.
     """
     # Поле для ввода - тема презентации (только для записи)
     theme = serializers.CharField(
@@ -158,7 +158,7 @@ class GenerateThemesSerializer(serializers.Serializer):
         # Получаем количество слайдов из атрибутов
         slides_count = attrs["slides_count"]
         # Проверяем, что количество слайдов в допустимом диапазоне
-        if not (1 <= slides_count <= 20):
+        if not (1 <= slides_count <= 25):
             raise serializers.ValidationError(
                 "The number of slides cannot be less than 1 and more than 20"
             )

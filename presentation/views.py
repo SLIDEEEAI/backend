@@ -29,7 +29,7 @@ from decimal import Decimal
 from .serializers import (
     RegistrationSerializer,
     ChangePasswordSerializer,
-    GenerateThemesSerializer,
+    GeneratePresentationPlanSerializer,
     GenerateSlidesSerializer,
     GPTRequestSerializer,
     GetPresentationSerializer,
@@ -623,7 +623,7 @@ class GeneratePresentationPlanView(APIView):
     permission_classes = (IsAuthenticated,)
 
     # Сериализатор для валидации входных данных
-    serializer_class = GenerateThemesSerializer
+    serializer_class = GeneratePresentationPlanSerializer
 
     def post(self, request):
         """
