@@ -56,7 +56,7 @@ def chat_completion_create(
     model: str = "deepseek-v4-flash",
     temperature: float | None = 0.7,
     max_tokens: int | None = None,
-    thinking_enabled: bool = True,
+    thinking_enabled: bool = False,
     thinking_type: str = "enabled",
     extra_body: dict[str, Any] | None = None,
     request_options: dict[str, Any] | None = None,
@@ -72,7 +72,7 @@ def chat_completion_create(
         model: Модель DeepSeek
         temperature: Контролирует креативность (по-умолчанию 0.7)
         max_tokens: Лимит выходных токенов
-        thinking_enabled: Включить/выключить режим thinking в DeepSeek
+        thinking_enabled: Включить режим thinking в DeepSeek (по умолчанию выключен)
         thinking_type: Тип thinking (обычно "enabled")
         extra_body: Дополнительные параметры для DeepSeek. Будут объединены с thinking.
         request_options: Любые дополнительные top-level параметры запроса к chat.completions.create
@@ -93,8 +93,9 @@ def chat_completion_create(
         return None
 
     request_extra_body = dict(extra_body or {})
-    if thinking_enabled:
-        request_extra_body["thinking"] = {"type": thinking_type}
+    request_extra_body["thinking"] = {
+        "type": thinking_type if thinking_enabled else "disabled"
+    }
 
     request_payload: dict[str, Any] = {
         "messages": messages,
