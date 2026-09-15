@@ -216,7 +216,7 @@ def generate_slides_with_templates(presentation_theme: str, slides_count: int) -
     - common: Рисунок с текстом (стандартный, рисунок справа)
     - commonReverse: Рисунок с текстом (развернутый, рисунок слева)
     - textFW: Текст во всю длину слайда
-    - pictureFW: Картинка во всю длину слайда
+    - tableFW: Таблица во всю длину слайда
     - textWithPictureFW: Текст с картинкой во всю длину
     - twoPicturesWithCaption: 2 картинки с подписью
     - twoPicturesWithCaptionAndText: 2 картинки с подписью и текстом
@@ -248,8 +248,12 @@ def generate_slides_with_templates(presentation_theme: str, slides_count: int) -
 
     Правила выбора шаблона:
     - Для вводных, выводов, определений используй textFW
-    - Для демонстрации данных/графиков используй pictureFW или common
-    - Для сравнения двух элементов используй twoPicturesWithCaption
+    - Используй tableFW, когда материал естественно представить строками и столбцами:
+      для сравнения характеристик, числовых данных, хронологии, классификации
+      или перечня сущностей с одинаковым набором свойств
+    - Не используй tableFW для обычного текста или графика без табличных данных
+    - Для визуального сравнения двух элементов используй twoPicturesWithCaption,
+      а для сравнения их характеристик по нескольким критериям — tableFW
     - Для инструкций/процессов используй threeListItemsWithTitlesAndTwoPictures
     - Для ключевых метрик используй smallTextWithThreeListItems
     - Для кейсов/примеров используй textWithPictureFW
@@ -273,10 +277,10 @@ def generate_slides_with_templates(presentation_theme: str, slides_count: int) -
         }},
         {{
             "id": "topic-details",
-            "text": "Заголовок слайда 2",
-            "templateName": "smallTextWithThreeListItems",
-            "purpose": "list",
-            "contentHints": ["Третий тезис", "Четвёртый тезис"],
+            "text": "Сравнение ключевых характеристик",
+            "templateName": "tableFW",
+            "purpose": "comparison",
+            "contentHints": ["Сравнить объекты по стоимости", "Сопоставить сроки и результаты"],
             "groupId": "topic-overview",
             "continuationOf": "topic-introduction"
         }}
@@ -324,7 +328,8 @@ def generate_slides_with_templates(presentation_theme: str, slides_count: int) -
 
 
 THEME_TEMPLATES = {
-    "common", "commonReverse", "textFW", "pictureFW", "textWithPictureFW",
+    "common", "commonReverse", "textFW", "tableFW", "pictureFW",
+    "textWithPictureFW",
     "twoPicturesWithCaption", "twoPicturesWithCaptionAndText",
     "twoPicturesWithCaptionAndLargeText", "threePicturesWithCaptionAndText",
     "threeListItemsWithTitlesAndTwoPictures",
