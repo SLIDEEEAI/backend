@@ -838,7 +838,7 @@ class SavePresentationView(APIView):
             presentation = Presentation.objects.filter(id=request.data["id"]).first()
             if presentation:
                 if request.data["title"]:
-                    presentation.title = request.data["title"] if request.data["title"] else "Untitled"
+                    presentation.title = request.data["title"]
                 presentation.json = json.dumps(request.data["json"])
                 presentation.save()
 

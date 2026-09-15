@@ -34,6 +34,7 @@ class PresentationsService:
 
         presentation = Presentation.objects.create(
             user=user,
+            title=title,
             json=project_json
         )
         return presentation
