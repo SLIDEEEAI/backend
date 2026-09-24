@@ -8,7 +8,7 @@ import uuid
 from json import dumps
 from re import findall
 from io import BytesIO
-from typing import Any, Generator, Dict
+from typing import Any, Generator, Dict, Tuple, List
 
 from django.conf import settings
 from django.core.files.base import File, ContentFile
@@ -196,21 +196,22 @@ def generate_images2(presentation_theme, num_images):
         return []
 
 
-
-def generate_slides_with_templates(presentation_theme: str, slides_count: int) -> Generator[Dict[str, Any], None, None]:
+def generate_slides_with_templates(
+        presentation_prompt: str, slides_count: int
+) -> Tuple[str, List[Dict[str, Any]]]:
     """
-    Генерирует слайды с заголовками и рекомендованными шаблонами.
+    Генерирует тему презентации и слайды с заголовками и рекомендованными шаблонами.
 
     Args:
-        presentation_theme: Тема презентации
-        slides_count: Количество слайдов (1-20)
+        presentation_prompt: Промпт, описывающий презентацию для нейросети
+        slides_count: Количество слайдов
 
-    Yields:
-        Словарь с метаданными слайда: id, text, templateName, purpose,
-        contentHints, а при необходимости groupId и continuationOf.
+    Returns:
+        Кортеж (theme, slides), где slides — список словарей с метаданными слайда:
+        id, text, templateName, purpose, contentHints, а при необходимости
+        groupId и continuationOf.
     """
 
-    # Формируем описание доступных шаблонов для нейросети
     templates_description = """
     Доступные шаблоны слайдов:
     - common: Рисунок с текстом (стандартный, рисунок справа)
@@ -226,13 +227,17 @@ def generate_slides_with_templates(presentation_theme: str, slides_count: int) -
     - threeListItemsWithTitlesAndTwoPicturesReverse: 2 маленькие картинки и список из трёх параграфов с подписью (развернутый)
     - fourListItemsWithTitlesAndBottomPicture: Список из 4 элементов и картинкой внизу
     - smallTextWithThreeListItems: Заголовок с текстом и списком из 3 элементов
-    - endingSlide: Финальный слайд с выводами
+    - endingSlide: Финальный слайд с выводом
     """
 
-    # Формируем запрос к нейросети с требованием вернуть JSON
     system_prompt = f"""
-    Ты помогаешь создать структуру презентации на тему '{presentation_theme}'.
-    Нужно сгенерировать {slides_count} слайдов.
+    Ты помогаешь создать структуру презентации по запросу пользователя: '{presentation_prompt}'.
+
+    Нужно сгенерировать конечную тему презентации и {slides_count} слайдов.
+
+    Правила выбора темы:
+    1. Название темы должна быть короткой, насколько это позволяет сама тема.
+    2. Если в запросе пользователя есть явное указание темы, то используй его без изменений, максимум исправь грамматические ошибки. 
 
     Для каждого слайда придумай:
     1. Уникальный стабильный id в kebab-case латиницей
@@ -264,67 +269,74 @@ def generate_slides_with_templates(presentation_theme: str, slides_count: int) -
     - Все id должны быть уникальными
     - continuationOf может ссылаться только на id более раннего слайда
     - groupId и continuationOf не обязательны, не добавляй их без необходимости
+    - пожелания по слайдам в запросе пользователя всегда считать самым приоритетным
 
-    Ответ должен быть ТОЛЬКО в формате JSON массива:
-    [
-        {{
-            "id": "topic-introduction",
-            "text": "Заголовок слайда 1",
-            "templateName": "common",
-            "purpose": "introduction",
-            "contentHints": ["Первый тезис", "Второй тезис"],
-            "groupId": "topic-overview"
-        }},
-        {{
-            "id": "topic-details",
-            "text": "Сравнение ключевых характеристик",
-            "templateName": "tableFW",
-            "purpose": "comparison",
-            "contentHints": ["Сравнить объекты по стоимости", "Сопоставить сроки и результаты"],
-            "groupId": "topic-overview",
-            "continuationOf": "topic-introduction"
-        }}
-    ]
+    Ответ должен быть ТОЛЬКО в формате JSON:
+    {{
+        "theme" : "Тема презентации",
+        "slides" : [
+            {{
+                "id": "topic-introduction",
+                "text": "Заголовок слайда 1",
+                "templateName": "common",
+                "purpose": "introduction",
+                "contentHints": ["Первый тезис", "Второй тезис"],
+                "groupId": "topic-overview"
+            }},
+            {{
+                "id": "topic-details",
+                "text": "Сравнение ключевых характеристик",
+                "templateName": "tableFW",
+                "purpose": "comparison",
+                "contentHints": ["Сравнить объекты по стоимости", "Сопоставить сроки и результаты"],
+                "groupId": "topic-overview",
+                "continuationOf": "topic-introduction"
+            }}
+        ]
+    }}
 
-    Не добавляй никаких пояснений, только JSON массив.
+    Не добавляй никаких пояснений, только JSON с темой и массивом слайдов.
     """
 
-    # Отправляем запрос к нейросети
     content = chat_completion_create(system_content=system_prompt)
 
-    # Проверяем, что получили ответ
+    # Если ответа нет — возвращаем fallback-тему и слайды
     if not content:
-        for i in range(slides_count):
-            yield _fallback_theme_slide(i, slides_count)
-        return
+        fallback_slides = [
+            _fallback_theme_slide(i, slides_count) for i in range(slides_count)
+        ]
+        return presentation_prompt, fallback_slides
 
-    # Парсим JSON ответ от нейросети
     try:
-        # Очищаем ответ от возможных маркеров кода markdown
         content = content.strip()
         if content.startswith("```json"):
-            content = content[7:]  # Убираем ```json
+            content = content[7:]
         if content.startswith("```"):
-            content = content[3:]  # Убираем ```
+            content = content[3:]
         if content.endswith("```"):
-            content = content[:-3]  # Убираем закрывающие ```
+            content = content[:-3]
 
-        # Преобразуем JSON строку в Python объект
-        import json
         slides_data = json.loads(content)
 
-        # Проверяем, что получили список
-        if not isinstance(slides_data, list):
-            raise ValueError("Ответ не является списком")
+        # Ожидаем объект с полями theme и slides
+        if not isinstance(slides_data, dict):
+            raise ValueError("Ответ не является объектом с полями theme и slides")
 
-        normalized_slides = _normalize_theme_slides(slides_data, slides_count)
-        yield from normalized_slides
+        theme = slides_data.get("theme") or presentation_prompt
+        raw_slides = slides_data.get("slides") or []
+
+        if not isinstance(raw_slides, list):
+            raise ValueError("Поле slides не является списком")
+
+        normalized_slides = _normalize_theme_slides(raw_slides, slides_count)
+        return theme, normalized_slides
 
     except (json.JSONDecodeError, ValueError, AttributeError) as e:
         print(f"Ошибка парсинга JSON: {e}, пробуем fallback метод")
         lines = findall(r"[^\W]\w+.*", content)
         fallback_data = [{"text": line.strip()} for line in lines[:slides_count]]
-        yield from _normalize_theme_slides(fallback_data, slides_count)
+        fallback_slides = _normalize_theme_slides(fallback_data, slides_count)
+        return presentation_prompt, fallback_slides
 
 
 THEME_TEMPLATES = {

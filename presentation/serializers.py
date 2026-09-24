@@ -130,20 +130,14 @@ class GeneratePresentationPlanSerializer(serializers.Serializer):
     """
     Сериализатор для валидации и генерации плана слайдов.
     """
-    # Поле для ввода - тема презентации (только для записи)
-    theme = serializers.CharField(
-        max_length=1024,
-        write_only=True  # Поле используется только на входе, не возвращается в ответе
-    )
-    # Поле для ввода - количество слайдов (только для записи)
-    slides_count = serializers.IntegerField(
-        write_only=True,  # Поле используется только на входе
-        required=True  # Обязательное поле
-    )
-    # Поле для вывода - список слайдов с ролью, шаблоном и тезисами
-    themes = serializers.ListField(
-        read_only=True  # Поле только для чтения, не принимается на входе
-    )
+
+    # Входные поля
+    user_prompt = serializers.CharField(max_length=1024, write_only=True, required=True)
+    slides_count = serializers.IntegerField(min_value=1, write_only=True, required=True)
+
+    # Выходные поля (read_only, заполняются в create)
+    project_theme = serializers.CharField(read_only=True)
+    slides = serializers.ListField(child=serializers.DictField(), read_only=True)
 
     def validate(self, attrs: OrderedDict) -> OrderedDict:
         """
@@ -165,25 +159,26 @@ class GeneratePresentationPlanSerializer(serializers.Serializer):
         # Возвращаем проверенные данные
         return attrs
 
-    def create(self, validated_data: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
+    def create(self, validated_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Генерация слайдов на основе валидированных данных.
+
         Args:
             validated_data: Проверенные данные с ключами 'theme' и 'slides_count'
+
         Returns:
-            Словарь с ключом 'themes', содержащим список слайдов
+            Словарь с ключами 'project_theme' и 'slides'
         """
-        # Извлекаем тему презентации
-        theme = validated_data["theme"]
-        # Извлекаем количество слайдов
+        user_prompt = validated_data["user_prompt"]
         slides_count = validated_data["slides_count"]
-        # Генерируем слайды с расширенными метаданными
-        themes_generator = generate_slides_with_templates(theme, slides_count)
-        # Преобразуем генератор в список (массив объектов)
-        themes = list(themes_generator)
-        # Возвращаем словарь с результатом
-        # Сериализатор автоматически преобразует это в JSON
-        return {"themes": themes}
+
+        # Генерируем тему и слайды
+        project_theme, slides = generate_slides_with_templates(user_prompt, slides_count)
+
+        return {
+            "project_theme": project_theme,
+            "slides": slides,
+        }
 
 
 class GenerateSlidesSerializer(serializers.Serializer):
